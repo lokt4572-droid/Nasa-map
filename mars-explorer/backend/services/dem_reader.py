@@ -158,14 +158,35 @@ def _dataset_pyproj_crs(src):
     return CRS.from_wkt(src.crs.to_wkt())
 
 
+def x_wrap_period(ds_crs, left: float, right: float) -> float | None:
+    """Period for wrapping x around the planet, or None.
+
+    Geographic CRS: 360 degrees. Projected cylindrical CRS whose raster spans the whole
+    circumference (e.g. MOLA MEGDR, Equirectangular with central_meridian 180): the raster
+    width. Without this, the longitude exactly on the raster seam (lon 0 for a 180-centred
+    MEGDR) falls on the right edge and is wrongly reported as outside the DEM."""
+    if ds_crs.is_geographic:
+        return 360.0
+    try:
+        a = ds_crs.ellipsoid.semi_major_metre
+    except Exception:  # noqa: BLE001
+        return None
+    width = right - left
+    circumference = 2 * math.pi * a
+    if a and abs(width - circumference) <= 1e-4 * circumference:
+        return width
+    return None
+
+
 def _locate(src, x: float, y: float, point_crs) -> tuple[int, int, float, float]:
     """Return (row, col, x_ds, y_ds) of the point inside the raster, handling 360° wrap."""
     ds_crs = _dataset_pyproj_crs(src)
     x_ds, y_ds = transform_point(x, y, point_crs, ds_crs)
     candidates = [x_ds]
-    if ds_crs.is_geographic:
-        candidates += [x_ds + 360.0, x_ds - 360.0]
     b = src.bounds
+    period = x_wrap_period(ds_crs, b.left, b.right)
+    if period:
+        candidates += [x_ds + period, x_ds - period]
     for cx in candidates:
         if b.left <= cx < b.right and b.bottom < y_ds <= b.top:
             row, col = src.index(cx, y_ds)

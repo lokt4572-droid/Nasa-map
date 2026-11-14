@@ -98,27 +98,47 @@ def sample_grid(ds, bbox: tuple[float, float, float, float], width: int, height:
         t = src.transform
         if t.b != 0 or t.d != 0:
             raise RenderError("Rotated raster grids are not supported")
-        if ds_crs.is_geographic:
-            xs = (xs - src.bounds.left) % 360.0 + src.bounds.left
+        period = dem_reader.x_wrap_period(ds_crs, src.bounds.left, src.bounds.right)
+        if period:
+            xs = (xs - src.bounds.left) % period + src.bounds.left
         cols = np.floor((xs - t.c) / t.a).astype(np.int64)
         rows = np.floor((ys - t.f) / t.e).astype(np.int64)
         inside = (rows >= 0) & (rows < src.height) & (cols >= 0) & (cols < src.width) & np.isfinite(xs) & np.isfinite(ys)
         if not inside.any():
             return out
-        r0, r1 = int(rows[inside].min()), int(rows[inside].max())
-        c0, c1 = int(cols[inside].min()), int(cols[inside].max())
-        wh, ww = r1 - r0 + 1, c1 - c0 + 1
-        fy = max(1, math.ceil(wh / (2 * height)))
-        fx = max(1, math.ceil(ww / (2 * width)))
-        shape = (max(1, wh // fy), max(1, ww // fx))
-        data = src.read(1, window=Window(c0, r0, ww, wh), out_shape=shape, masked=True)
         scale = float(src.scales[0]) if src.scales else 1.0
         offset = float(src.offsets[0]) if src.offsets else 0.0
-    arr = np.ma.filled(data.astype("float64"), np.nan) * scale + offset
-    rr = np.clip(((rows - r0) * shape[0]) // wh, 0, shape[0] - 1)
-    cc = np.clip(((cols - c0) * shape[1]) // ww, 0, shape[1] - 1)
-    out[inside] = arr[rr[inside], cc[inside]]
+        # A grid that crosses the raster's x seam uses columns at both ends of the raster. Reading
+        # one window from the min to the max column would span the whole raster and decimate it
+        # (wrong cells), so each contiguous column segment is read on its own.
+        for seg in _column_segments(cols[inside]):
+            mask = inside & (cols >= seg[0]) & (cols <= seg[1])
+            r0, r1 = int(rows[mask].min()), int(rows[mask].max())
+            c0, c1 = seg
+            wh, ww = r1 - r0 + 1, c1 - c0 + 1
+            fy = max(1, math.ceil(wh / (2 * height)))
+            fx = max(1, math.ceil(ww / (2 * width)))
+            shape = (max(1, wh // fy), max(1, ww // fx))
+            data = src.read(1, window=Window(c0, r0, ww, wh), out_shape=shape, masked=True)
+            arr = np.ma.filled(data.astype("float64"), np.nan) * scale + offset
+            rr = np.clip(((rows - r0) * shape[0]) // wh, 0, shape[0] - 1)
+            cc = np.clip(((cols - c0) * shape[1]) // ww, 0, shape[1] - 1)
+            out[mask] = arr[rr[mask], cc[mask]]
     return out
+
+
+def _column_segments(cols: np.ndarray) -> list[tuple[int, int]]:
+    """Split the used columns at their largest gap when the grid wraps around the raster seam."""
+    u = np.unique(cols)
+    if len(u) < 2:
+        return [(int(u[0]), int(u[-1]))]
+    gaps = np.diff(u)
+    i = int(np.argmax(gaps))
+    # a "wrapping" grid leaves a gap much larger than its own sampling step
+    step = max(1, int(np.median(gaps)))
+    if gaps[i] > 4 * step and gaps[i] > (u[-1] - u[0]) / 2:
+        return [(int(u[0]), int(u[i])), (int(u[i + 1]), int(u[-1]))]
+    return [(int(u[0]), int(u[-1]))]
 
 
 def _gradients(z: np.ndarray, bbox, radius_m: float) -> tuple[np.ndarray, np.ndarray]:

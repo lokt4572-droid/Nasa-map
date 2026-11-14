@@ -323,3 +323,32 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .globe-meta__list { display: grid; grid-template-columns: 78px 1fr; gap: 2px 8px; margin: 0; }
 .globe-meta__list dt { color: var(--text-faint); }
 .globe-meta__list dd { margin: 0; }
+
+/* ---------- local 3D terrain (v0.3) ---------- */
+.lt3d { margin-top: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg-raised); }
+.lt3d__head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.lt3d__title { font-size: 10.5px; letter-spacing: .1em; color: var(--accent-2); font-weight: 600; }
+.lt3d__head .btn { margin-left: auto; }
+.lt3d__msg { padding: 10px 8px; font-size: 12px; }
+.lt3d__unavailable strong { display: block; color: var(--warn); letter-spacing: .08em; margin-bottom: 4px; }
+.lt3d__body { padding: 6px 8px 8px; font-size: 11.5px; }
+.lt3d__view { position: relative; height: 190px; border-radius: var(--radius); overflow: hidden; background: #0d0f12; }
+.lt3d__view--big { height: min(62vh, 640px); }
+.lt3d__host { position: absolute; inset: 0; cursor: grab; }
+.lt3d__north { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%; background: rgba(24,27,31,.85); border: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.lt3d__arrow { display: flex; flex-direction: column; align-items: center; line-height: 1; font-size: 9px; color: var(--accent-2); }
+.lt3d__arrow span { color: var(--text); font-size: 8px; }
+.lt3d__buttons { position: absolute; left: 6px; top: 6px; display: flex; gap: 4px; }
+.lt3d__controls { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; }
+.lt3d__ctl { display: flex; flex-direction: column; gap: 2px; color: var(--text-dim); font-size: 10.5px; }
+.lt3d__ctl select { background: var(--bg-input); color: var(--text); border: 1px solid var(--line-strong); border-radius: 3px; font: inherit; }
+.lt3d__legend { margin-top: 6px; }
+.lt3d__bar { height: 8px; border-radius: 2px; }
+.lt3d__barlabels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); }
+.lt3d__meta { display: grid; grid-template-columns: 70px 1fr; gap: 2px 8px; margin: 6px 0 0; }
+.lt3d__meta dt { color: var(--text-faint); }
+.lt3d__meta dd { margin: 0; }
+.lt3d--expanded {
+  position: fixed; z-index: 50; inset: 60px max(16px, 8vw) 40px; overflow-y: auto; margin: 0;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6);
+}

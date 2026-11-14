@@ -2,6 +2,7 @@ import { bboxContains, getLayerConfig } from "../../config/mapLayers";
 import { MAP_COORDINATE_CONVENTION, formatLat, formatLon } from "../../config/marsProjection";
 import { PLANETS } from "../../config/planetRegistry";
 import { useAppStore } from "../../store/useAppStore";
+import LocalTerrain3D from "../terrain/LocalTerrain3D";
 import TerrainInfo from "../terrain/TerrainInfo";
 
 export default function RightPanel() {
@@ -69,6 +70,7 @@ export default function RightPanel() {
       </dl>
       <h4 className="subhead">Terrain</h4>
       <TerrainInfo />
+      <LocalTerrain3D />
     </aside>
   );
 }

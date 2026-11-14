@@ -402,7 +402,8 @@ def datasets_covering(
             logger.warning("Cannot transform point into %s: %s", ds.name, exc)
             continue
         b = ds.coverage_bbox
-        xs = [xd, xd + 360.0, xd - 360.0] if ds_crs.is_geographic else [xd]
+        period = dem_reader.x_wrap_period(ds_crs, b["left"], b["right"])
+        xs = [xd, xd + period, xd - period] if period else [xd]
         if any(b["left"] <= cx < b["right"] for cx in xs) and b["bottom"] < yd <= b["top"]:
             hits.append(ds)
     hits.sort(key=lambda d: (d.resolution_meters is None, d.resolution_meters or 0.0))

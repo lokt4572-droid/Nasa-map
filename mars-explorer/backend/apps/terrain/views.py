@@ -388,3 +388,54 @@ def render(request):
     resp["Access-Control-Expose-Headers"] = "X-Visualization, X-Value-Min, X-Value-Max, X-Value-Units, X-Valid-Fraction, X-Dataset"
     resp["Cache-Control"] = "private, max-age=300"
     return resp
+
+
+def _float_param(request, name: str, default: float, lo: float, hi: float) -> float:
+    raw = request.query_params.get(name)
+    if raw is None:
+        return default
+    try:
+        val = float(raw)
+    except ValueError as exc:
+        raise ApiError(f"{name} must be a number", code="VALIDATION_ERROR") from exc
+    if not (lo <= val <= hi) or not val == val:
+        raise ApiError(f"{name} must be in {lo}..{hi}", code="VALIDATION_ERROR")
+    return val
+
+
+@api_view(["GET"])
+def patch(request):
+    """Elevation grid around a point for the local 3D terrain viewer.
+
+    Query: planet, longitude|lon, latitude|lat, radius_m (100..500000, default 20000),
+    max_dimension (16..512, default 256), optional dataset, crs, lat_convention.
+    404 DEM_NOT_AVAILABLE when no validated DEM covers the point; 422 when the DEM is too
+    coarse for the requested radius (the response says the minimum radius)."""
+    from services import terrain_patch
+
+    qp = request.query_params.copy()
+    for long_name, short in (("longitude", "lon"), ("latitude", "lat")):
+        if long_name in qp and short not in qp:
+            qp[short] = qp[long_name]
+    request._request.GET = qp  # accept both spellings
+    radius = _float_param(request, "radius_m", 20_000.0, *terrain_patch.RADIUS_LIMITS_M)
+    max_dim = _int_param(request, "max_dimension", 256, *terrain_patch.DIMENSION_LIMITS)
+    lon, lat, crs, lat_conv, query = _parse_point(request)
+    _require_backend()
+    candidates = list(_covering_existing(request, lon, lat, crs, lat_conv, query["planet"]))
+    if not candidates:
+        raise _not_available(query)
+    ds = min(candidates, key=lambda d: d.resolution_meters or float("inf"))  # finest covering DEM
+    _, lat_used, conv = dataset_manager.point_for_dataset(lon, lat, lat_conv, ds)
+    try:
+        body = terrain_patch.build_patch(ds, lon, lat, radius, max_dim, crs, lat_conv)
+    except terrain_patch.PatchError as exc:
+        raise ApiError(str(exc), code=exc.code, status_code=422, details={"query": query, **exc.details}) from exc
+    except dem_reader.RasterReadError as exc:
+        raise ApiError(str(exc), code="DEM_READ_ERROR", status_code=500) from exc
+    body["query"] = query
+    body["latitude"] = _latitude_info(conv, lat, lat_used, ds)
+    body["alternatives"] = [_dataset_summary(d) for d in candidates if d.id != ds.id]
+    resp = Response(body)
+    resp["Cache-Control"] = "private, max-age=300"
+    return resp

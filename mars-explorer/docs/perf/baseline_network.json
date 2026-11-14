@@ -1,0 +1,436 @@
+{
+  "started_utc": "2026-11-14T14:26:08Z",
+  "viewport_px": [
+    1280,
+    800
+  ],
+  "layers": [
+    {
+      "body": "MARS",
+      "layer": "Mars_MGS_MOLA_ClrShade_merge_global_463m",
+      "capabilities": {
+        "status": 200,
+        "ms": 1090.2,
+        "bytes": 7040
+      },
+      "views": {
+        "GLOBAL": {
+          "matrix": "1",
+          "tiles": 8,
+          "status_counts": {
+            "200": 8
+          },
+          "success_pct": 100.0,
+          "avg_ms": 3515.5,
+          "p95_ms": 6834.9,
+          "wall_ms_4_parallel": 8070.5,
+          "avg_kb": 61.6
+        },
+        "REGIONAL": {
+          "matrix": "4",
+          "tiles": 24,
+          "status_counts": {
+            "200": 24
+          },
+          "success_pct": 100.0,
+          "avg_ms": 4010.6,
+          "p95_ms": 8218.8,
+          "wall_ms_4_parallel": 31626.4,
+          "avg_kb": 69.0
+        },
+        "LOCAL": {
+          "matrix": "7",
+          "tiles": 24,
+          "status_counts": {
+            "200": 24
+          },
+          "success_pct": 100.0,
+          "avg_ms": 3105.8,
+          "p95_ms": 7406.3,
+          "wall_ms_4_parallel": 19296.7,
+          "avg_kb": 55.2
+        }
+      },
+      "grid": {
+        "tms": "default028mm",
+        "levels": 8,
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "bbox": [
+          -180.0,
+          -89.9991635,
+          179.9983271,
+          90.0
+        ],
+        "TileMatrixSetLimits": false
+      }
+    },
+    {
+      "body": "MARS",
+      "layer": "Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw",
+      "capabilities": {
+        "status": 200,
+        "ms": 3712.0,
+        "bytes": 7417
+      },
+      "views": {
+        "GLOBAL": {
+          "matrix": "1",
+          "tiles": 8,
+          "status_counts": {
+            "200": 8
+          },
+          "success_pct": 100.0,
+          "avg_ms": 3235.0,
+          "p95_ms": 7541.9,
+          "wall_ms_4_parallel": 10158.0,
+          "avg_kb": 51.8
+        },
+        "REGIONAL": {
+          "matrix": "4",
+          "tiles": 24,
+          "status_counts": {
+            "200": 24
+          },
+          "success_pct": 100.0,
+          "avg_ms": 3173.8,
+          "p95_ms": 5675.4,
+          "wall_ms_4_parallel": 20616.8,
+          "avg_kb": 58.0
+        },
+        "LOCAL": {
+          "matrix": "8",
+          "tiles": 24,
+          "status_counts": {
+            "200": 24
+          },
+          "success_pct": 100.0,
+          "avg_ms": 3558.3,
+          "p95_ms": 9721.9,
+          "wall_ms_4_parallel": 22092.2,
+          "avg_kb": 50.6
+        }
+      },
+      "grid": {
+        "tms": "default028mm",
+        "levels": 9,
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8"
+        ],
+        "bbox": [
+          -180.0,
+          -89.999224,
+          179.9984479,
+          90.0
+        ],
+        "TileMatrixSetLimits": false
+      }
+    },
+    {
+      "body": "MARS",
+      "layer": "JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0",
+      "capabilities": {
+        "status": 200,
+        "ms": 9129.1,
+        "bytes": 8810
+      },
+      "views": {
+        "GLOBAL": {
+          "matrix": "1",
+          "tiles": 1,
+          "status_counts": {
+            "200": 1
+          },
+          "success_pct": 100.0,
+          "avg_ms": 782.6,
+          "p95_ms": 782.6,
+          "wall_ms_4_parallel": 783.7,
+          "avg_kb": 0.3
+        },
+        "REGIONAL": {
+          "matrix": "7",
+          "tiles": 4,
+          "status_counts": {
+            "200": 4
+          },
+          "success_pct": 100.0,
+          "avg_ms": 2510.3,
+          "p95_ms": 6394.5,
+          "wall_ms_4_parallel": 6399.8,
+          "avg_kb": 2.7
+        },
+        "LOCAL": {
+          "matrix": "13",
+          "tiles": 24,
+          "status_counts": {
+            "200": 24
+          },
+          "success_pct": 100.0,
+          "avg_ms": 2849.9,
+          "p95_ms": 5242.8,
+          "wall_ms_4_parallel": 19197.8,
+          "avg_kb": 30.1
+        }
+      },
+      "grid": {
+        "tms": "default028mm",
+        "levels": 14,
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13"
+        ],
+        "bbox": [
+          77.1604655,
+          18.2110274,
+          77.6991776,
+          18.7211945
+        ],
+        "TileMatrixSetLimits": false
+      }
+    },
+    {
+      "body": "MARS",
+      "layer": "JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd",
+      "capabilities": {
+        "status": 200,
+        "ms": 1483.3,
+        "bytes": 10037
+      },
+      "views": {
+        "GLOBAL": {
+          "matrix": "1",
+          "tiles": 1,
+          "status_counts": {
+            "200": 1
+          },
+          "success_pct": 100.0,
+          "avg_ms": 997.8,
+          "p95_ms": 997.8,
+          "wall_ms_4_parallel": 998.7,
+          "avg_kb": 0.3
+        },
+        "REGIONAL": {
+          "matrix": "9",
+          "tiles": 4,
+          "status_counts": {
+            "200": 4
+          },
+          "success_pct": 100.0,
+          "avg_ms": 2245.1,
+          "p95_ms": 2742.1,
+          "wall_ms_4_parallel": 2747.1,
+          "avg_kb": 12.3
+        },
+        "LOCAL": {
+          "matrix": "17",
+          "tiles": 30,
+          "status_counts": {
+            "200": 30
+          },
+          "success_pct": 100.0,
+          "avg_ms": 3076.1,
+          "p95_ms": 7602.4,
+          "wall_ms_4_parallel": 24504.3,
+          "avg_kb": 32.9
+        }
+      },
+      "grid": {
+        "tms": "default028mm",
+        "levels": 18,
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17"
+        ],
+        "bbox": [
+          77.2229331,
+          18.3067994,
+          77.583964,
+          18.669315
+        ],
+        "TileMatrixSetLimits": false
+      }
+    },
+    {
+      "body": "MOON",
+      "layer": "LRO_WAC_Mosaic_Global_303ppd_v02",
+      "capabilities": {
+        "status": 200,
+        "ms": 4709.6,
+        "bytes": 7241
+      },
+      "views": {
+        "GLOBAL": {
+          "matrix": "1",
+          "tiles": 8,
+          "status_counts": {
+            "200": 8
+          },
+          "success_pct": 100.0,
+          "avg_ms": 3174.3,
+          "p95_ms": 6330.0,
+          "wall_ms_4_parallel": 6694.9,
+          "avg_kb": 50.1
+        },
+        "REGIONAL": {
+          "matrix": "4",
+          "tiles": 24,
+          "status_counts": {
+            "200": 23,
+            "-1": 1
+          },
+          "success_pct": 95.8,
+          "avg_ms": 2597.9,
+          "p95_ms": 6805.4,
+          "wall_ms_4_parallel": 28853.1,
+          "avg_kb": 38.7
+        },
+        "LOCAL": {
+          "matrix": "8",
+          "tiles": 24,
+          "status_counts": {
+            "200": 24
+          },
+          "success_pct": 100.0,
+          "avg_ms": 3068.2,
+          "p95_ms": 7378.3,
+          "wall_ms_4_parallel": 19710.7,
+          "avg_kb": 26.1
+        }
+      },
+      "grid": {
+        "tms": "default028mm",
+        "levels": 9,
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8"
+        ],
+        "bbox": [
+          -180.0,
+          -90.0,
+          180.0,
+          90.0
+        ],
+        "TileMatrixSetLimits": false
+      }
+    },
+    {
+      "body": "MERCURY",
+      "layer": "Mercury_MESSENGER_mosaic_global_250m_2013",
+      "capabilities": {
+        "status": 200,
+        "ms": 1019.9,
+        "bytes": 7061
+      },
+      "views": {
+        "GLOBAL": {
+          "matrix": "1",
+          "tiles": 8,
+          "status_counts": {
+            "200": 8
+          },
+          "success_pct": 100.0,
+          "avg_ms": 4560.9,
+          "p95_ms": 17311.3,
+          "wall_ms_4_parallel": 18748.6,
+          "avg_kb": 54.9
+        },
+        "REGIONAL": {
+          "matrix": "4",
+          "tiles": 24,
+          "status_counts": {
+            "200": 24
+          },
+          "success_pct": 100.0,
+          "avg_ms": 2971.3,
+          "p95_ms": 5298.7,
+          "wall_ms_4_parallel": 19613.5,
+          "avg_kb": 64.6
+        },
+        "LOCAL": {
+          "matrix": "7",
+          "tiles": 24,
+          "status_counts": {
+            "200": 24
+          },
+          "success_pct": 100.0,
+          "avg_ms": 3803.3,
+          "p95_ms": 10075.1,
+          "wall_ms_4_parallel": 25354.4,
+          "avg_kb": 43.2
+        }
+      },
+      "grid": {
+        "tms": "default028mm",
+        "levels": 8,
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "bbox": [
+          -180.0,
+          -89.9999824,
+          179.9999648,
+          90.0
+        ],
+        "TileMatrixSetLimits": false
+      }
+    }
+  ]
+}

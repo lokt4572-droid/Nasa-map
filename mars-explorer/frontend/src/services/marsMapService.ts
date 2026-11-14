@@ -26,6 +26,8 @@ import { ALL_LAYERS, type BBox, type MarsMapLayer } from "../config/mapLayers";
 import { MARS_GEOGRAPHIC_EXTENT } from "../config/marsProjection";
 import { mapProjectionFor, registerPlanetProjections } from "../config/planetProjections";
 import type { PlanetId } from "../config/planetRegistry";
+import { markCapabilitiesPending, recordEvent } from "./mapDiagnostics";
+import { createTileLoader, pathOf, type TileLoaderHandle } from "./tileLoader";
 
 export type WmtsErrorCode =
   | "CAPABILITIES_NETWORK"
@@ -188,25 +190,66 @@ export function describeTileGrid(source: WMTS): TileGridInfo {
   };
 }
 
-export async function loadWmtsLayer(
-  layer: MarsMapLayer,
-  fetchImpl: typeof fetch = fetch,
-): Promise<{ tileLayer: TileLayer<WMTS>; info: TileGridInfo }> {
+/** A regional layer is only rendered once its coverage spans at least this many pixels. */
+export const REGIONAL_MIN_PIXELS = 64;
+
+/**
+ * Resolution limit (deg/px) above which a regional layer is not rendered (and so requests no
+ * tiles). Without it, a 0.5 deg CTX/HiRISE mosaic requests coarse, mostly empty tiles at the
+ * global view and competes with the base map for NASA Trek's ~6 HTTP/1.1 connections.
+ */
+export function regionalMaxResolution(layer: MarsMapLayer): number | undefined {
+  if (layer.coverage !== "regional") return undefined;
+  const span = Math.max(layer.bbox.east - layer.bbox.west, layer.bbox.north - layer.bbox.south);
+  return span / REGIONAL_MIN_PIXELS;
+}
+
+export interface LoadedWmtsLayer {
+  tileLayer: TileLayer<WMTS>;
+  info: TileGridInfo;
+  loader: TileLoaderHandle;
+}
+
+export async function loadWmtsLayer(layer: MarsMapLayer, fetchImpl: typeof fetch = fetch): Promise<LoadedWmtsLayer> {
+  const diag = { layerId: layer.id, planetId: layer.planet };
   if (!layer.capabilitiesUrl) {
+    recordEvent({ ...diag, type: "LAYER_FAILED", category: "INVALID_CONFIGURATION", note: "no GetCapabilities URL" });
     throw new WmtsLayerError("NO_CAPABILITIES_URL", "Layer has no GetCapabilities URL configured", layer.layerId);
   }
-  const caps = await fetchCapabilities(layer.capabilitiesUrl, layer.layerId, fetchImpl);
-  const source = buildWmtsSource(caps, layer);
+  markCapabilitiesPending(layer.id, layer.planet);
+  let source: WMTS;
+  try {
+    const t0 = performance.now();
+    const caps = await fetchCapabilities(layer.capabilitiesUrl, layer.layerId, fetchImpl);
+    recordEvent({ ...diag, type: "CAPABILITIES_LOADED", durationMs: performance.now() - t0, path: pathOf(layer.capabilitiesUrl) });
+    source = buildWmtsSource(caps, layer);
+  } catch (err) {
+    const code = err instanceof WmtsLayerError ? err.code : "UNKNOWN";
+    recordEvent({ ...diag, type: "LAYER_FAILED", note: `${code}: ${err instanceof Error ? err.message : String(err)}` });
+    throw err;
+  }
   const info = describeTileGrid(source);
+  const loader = createTileLoader({
+    layerId: layer.id,
+    planetId: layer.planet,
+    grid: source.getTileGrid() as WMTSTileGrid,
+    bbox: layer.bbox,
+  });
+  source.setTileLoadFunction(loader.loadFunction);
   const tileLayer = new TileLayer({
     source,
     visible: layer.visible,
     opacity: layer.opacity,
     zIndex: ALL_LAYERS.findIndex((l) => l.id === layer.id),
     extent: info.extent ?? undefined,
+    maxResolution: regionalMaxResolution(layer),
+    // Global base maps keep one coarser level ready so the screen is never blank while
+    // detailed tiles arrive (low resolution first); regional layers do not preload.
+    preload: layer.coverage === "global" ? 1 : 0,
     properties: { marsLayerId: layer.id },
   });
-  return { tileLayer, info };
+  recordEvent({ ...diag, type: "LAYER_INITIALIZED", note: `${info.matrixSet}, ${info.matrixIds.length} levels` });
+  return { tileLayer, info, loader };
 }
 
 // ---------------------------------------------------------------------------
@@ -253,30 +296,52 @@ export function createMarsMap(target: HTMLElement | undefined, planet: PlanetId 
       new VectorLayer({ source: markerSource, zIndex: 102, properties: { role: "marker" } }),
     ],
     controls: defaultControls({ zoom: false, rotate: false, attribution: false }),
+    // NASA Trek is HTTP/1.1 (~6 connections per host). Keeping fewer tiles "loading" lets
+    // OpenLayers' priority queue (centre first, current zoom first) decide the order instead
+    // of an opaque browser connection queue (default is 16).
+    maxTilesLoading: 8,
   });
   return { map, view, markerSource, hazardSource, waypointSource };
 }
 
-export function attachTileStats(source: WMTS, onChange: (s: TileStats) => void): () => void {
+/**
+ * Tile counters for the UI. Updates are coalesced (at most one every `throttleMs`, plus a
+ * trailing one) because each update re-renders React components: per-tile updates caused
+ * dozens of store writes per second while panning.
+ */
+export function attachTileStats(source: WMTS, onChange: (s: TileStats) => void, throttleMs = 250): () => void {
   const stats: TileStats = { loading: 0, loaded: 0, errors: 0 };
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let last = 0;
+  const flush = () => {
+    timer = null;
+    last = Date.now();
+    onChange({ ...stats });
+  };
+  const emit = () => {
+    if (timer) return;
+    const wait = Math.max(0, throttleMs - (Date.now() - last));
+    timer = setTimeout(flush, wait);
+  };
   const start = () => {
     stats.loading += 1;
-    onChange({ ...stats });
+    emit();
   };
   const end = () => {
     stats.loading = Math.max(0, stats.loading - 1);
     stats.loaded += 1;
-    onChange({ ...stats });
+    emit();
   };
   const error = () => {
     stats.loading = Math.max(0, stats.loading - 1);
     stats.errors += 1;
-    onChange({ ...stats });
+    emit();
   };
   source.on("tileloadstart", start);
   source.on("tileloadend", end);
   source.on("tileloaderror", error);
   return () => {
+    if (timer) clearTimeout(timer);
     source.un("tileloadstart", start);
     source.un("tileloadend", end);
     source.un("tileloaderror", error);

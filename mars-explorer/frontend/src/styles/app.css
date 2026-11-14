@@ -209,6 +209,33 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 }
 .map-error__row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 
+/* ---------- map diagnostics / layer status ---------- */
+.map-diag {
+  position: absolute; left: 10px; bottom: 10px; z-index: 10; max-width: min(340px, calc(100% - 270px));
+  background: rgba(24,27,31,.94); border: 1px solid var(--line-strong); border-radius: var(--radius); font-size: 11.5px;
+}
+.map-diag--open { width: 340px; }
+.map-diag__toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; color: var(--text-dim); font: inherit; font-size: 10.5px; letter-spacing: .1em; padding: 6px 8px; cursor: pointer; width: 100%; text-align: left; }
+.map-diag__body { padding: 0 8px 8px; max-height: 50vh; overflow-y: auto; }
+.map-diag__row { border-top: 1px solid var(--line); padding: 5px 0; }
+.map-diag__head { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+.map-diag__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-diag__stats { color: var(--text-dim); font-family: var(--mono); font-size: 10.5px; margin-top: 2px; }
+.map-diag__err { color: var(--err); font-size: 10.5px; word-break: break-all; margin-top: 2px; }
+.map-diag__actions { display: flex; gap: 6px; margin-top: 6px; }
+.map-diag__dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.map-diag__dot--ok { background: var(--ok); }
+.map-diag__dot--warn { background: var(--warn); }
+.map-diag__spinner { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent-2); display: inline-block; animation: map-diag-spin .8s linear infinite; }
+@keyframes map-diag-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .map-diag__spinner { animation: none; border-top-color: var(--accent-2); } }
+.badge { font-size: 9.5px; letter-spacing: .06em; padding: 1px 5px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
+.badge--ok { color: var(--ok); }
+.badge--warn { color: var(--warn); }
+.badge--err { color: var(--err); }
+.badge--info { color: var(--info); }
+.badge--dim { color: var(--text-faint); }
+
 /* ---------- status bar ---------- */
 .statusbar {
   display: flex; align-items: center; gap: 22px; padding: 0 12px; background: var(--bg-panel);

@@ -17,9 +17,11 @@ import {
   mapController,
   type MarsMapHandle,
 } from "../../services/marsMapService";
+import { bufferExtent, type TileLoaderHandle } from "../../services/tileLoader";
 import { useAppStore } from "../../store/useAppStore";
 import type { HazardSeverity } from "../../types/api";
 import MapControls from "./MapControls";
+import MapDiagnostics from "./MapDiagnostics";
 import MapLegend from "./MapLegend";
 import { RouteOverlay, TerrainOverlay } from "./MapOverlays";
 
@@ -78,7 +80,7 @@ function waypointStyle(name: string, kind: string) {
 export default function MarsMap() {
   const targetRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<MarsMapHandle | null>(null);
-  const tileLayers = useRef(new Map<string, { layer: TileLayer<WMTS>; detach: () => void }>());
+  const tileLayers = useRef(new Map<string, { layer: TileLayer<WMTS>; detach: () => void; abort: () => void; prune: TileLoaderHandle["pruneObsolete"] }>());
 
   const layers = useAppStore((s) => s.layers);
   const hazards = useAppStore((s) => s.hazards.data);
@@ -129,6 +131,13 @@ export default function MarsMap() {
     const onMoveEnd = () => {
       const v = h.view;
       setView({ resolution: v.getResolution() ?? 0, centerLat: v.getCenter()?.[1] ?? 0, zoom: v.getZoom() ?? 0 });
+      // Cancel tile downloads the new view no longer needs (OL itself lets them finish).
+      const size = h.map.getSize();
+      const res = v.getResolution();
+      if (size && res) {
+        const extent = bufferExtent(v.calculateExtent(size), 0.25);
+        tileLayers.current.forEach((l) => l.prune(extent, res));
+      }
     };
     h.map.on("pointermove", onMove);
     h.map.on("singleclick", onClick);
@@ -158,6 +167,8 @@ export default function MarsMap() {
       if (!st) continue;
       const existing = tileLayers.current.get(cfg.id);
       if (existing) {
+        // Hidden layers must not keep NASA Trek connections busy.
+        if (!st.visible && existing.layer.getVisible()) existing.abort();
         existing.layer.setVisible(st.visible);
         existing.layer.setOpacity(st.opacity);
         continue;
@@ -165,14 +176,18 @@ export default function MarsMap() {
       if (st.visible && st.status === "idle") {
         patchLayer(cfg.id, { status: "loading", error: null, errorCode: null });
         loadWmtsLayer(cfg)
-          .then(({ tileLayer, info }) => {
+          .then(({ tileLayer, info, loader }) => {
             if (handleRef.current !== h) return;
             const now = useAppStore.getState().layers[cfg.id]!;
             tileLayer.setVisible(now.visible);
             tileLayer.setOpacity(now.opacity);
             const source = tileLayer.getSource();
-            const detach = source ? attachTileStats(source, (tiles) => patchLayer(cfg.id, { tiles })) : () => {};
-            tileLayers.current.set(cfg.id, { layer: tileLayer, detach });
+            const detachStats = source ? attachTileStats(source, (tiles) => patchLayer(cfg.id, { tiles })) : () => {};
+            const detach = () => {
+              loader.abortAll();
+              detachStats();
+            };
+            tileLayers.current.set(cfg.id, { layer: tileLayer, detach, abort: loader.abortAll, prune: loader.pruneObsolete });
             h.map.addLayer(tileLayer);
             patchLayer(cfg.id, { status: "ready", grid: info });
           })
@@ -234,6 +249,7 @@ export default function MarsMap() {
       {mapReady && <TerrainOverlay />}
       {mapReady && <RouteOverlay />}
       <MapLegend />
+      <MapDiagnostics planetId={planet} />
       {failed.length > 0 && (
         <div className="map-error" role="alert">
           {failed.map((l) => (

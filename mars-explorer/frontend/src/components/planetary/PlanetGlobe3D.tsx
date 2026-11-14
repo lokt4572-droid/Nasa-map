@@ -295,6 +295,12 @@ export default function PlanetGlobe3D({ planet }: { planet: PlanetId }) {
             <span className="warn-text"> · {level.tilesMissing}/{level.tilesTotal} tiles missing (left blank, not filled in)</span>
           )}
         </div>
+        <div className="globe-panel__status" data-testid="globe-shape-status">
+          Shape: reference ellipsoid {(body.radiusEquatorial / 1000).toFixed(1)} × {(body.radiusPolar / 1000).toFixed(1)} km. NO ELEVATION is applied to this globe — relief you
+          see is shading in the imagery.
+          {planet === "MERCURY" &&
+            " Mercury has no ready-made global 3D terrain tiles. Elevation comes only from the MESSENGER global DEM (USGS, 665 m) once it is imported (Data manager); it supports broad-scale terrain only."}
+        </div>
         {picked && (
           <div className="globe-panel__pick">
             <span className="mono">

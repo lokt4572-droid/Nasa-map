@@ -383,3 +383,6 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .scene-overlay__title { font-weight: 600; letter-spacing: .06em; margin-bottom: 2px; }
 .scene-overlay__detail { color: var(--text-dim); }
 .scene-notice { color: var(--warn); }
+.globe-attribution { position: absolute; right: 10px; bottom: 40px; z-index: 12; max-width: 340px; background: rgba(24,27,31,.94); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 6px 8px; font-size: 11px; }
+.globe-attribution summary { cursor: pointer; letter-spacing: .06em; color: var(--text-dim); }
+.globe-attribution p { margin: 6px 0 0; color: var(--text-dim); }

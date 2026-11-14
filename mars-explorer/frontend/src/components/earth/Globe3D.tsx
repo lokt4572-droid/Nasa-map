@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { formatDistance, formatLat, formatLon } from "../../config/marsProjection";
+import { describeIonError } from "../../services/planetary/cesiumSceneService";
 import { dateAvailable, gibsXyzTemplate } from "../../services/earthService";
 import { geolocation } from "../../services/geolocationService";
 import { useAppStore } from "../../store/useAppStore";
@@ -67,6 +68,10 @@ export default function Globe3D() {
   measureRef.current = measure;
   const earth = useAppStore((s) => s.earth);
   const cfg = globeConfig(TOKEN);
+  const [terrainState, setTerrainState] = useState<{ state: "NOT_REQUESTED" | "REQUESTED" | "LOADED" | "FAILED"; error: string | null }>({
+    state: cfg.tokenPresent ? "REQUESTED" : "NOT_REQUESTED",
+    error: null,
+  });
 
   // Create the viewer once.
   useEffect(() => {
@@ -78,9 +83,27 @@ export default function Globe3D() {
         if (destroyed || !container.current) return;
         cesiumRef.current = C;
         if (cfg.tokenPresent) C.Ion.defaultAccessToken = TOKEN!.trim();
+        // A Mars/Moon scene may have run before: Earth always uses WGS 84 explicitly.
+        C.Ellipsoid.default = C.Ellipsoid.WGS84;
+        // Water mask + vertex normals: ocean surface effect and terrain shading from the
+        // provider's own normals (both are optional extensions of Cesium World Terrain).
+        const terrain = cfg.terrain === "CESIUM_WORLD_TERRAIN" ? C.Terrain.fromWorldTerrain({ requestWaterMask: true, requestVertexNormals: true }) : undefined;
+        if (terrain) {
+          terrain.readyEvent.addEventListener(() => !destroyed && setTerrainState({ state: "LOADED", error: null }));
+          terrain.errorEvent.addEventListener((err: unknown) => {
+            if (destroyed) return;
+            // Requested but not delivered: say so and fall back to the smooth ellipsoid.
+            setTerrainState({ state: "FAILED", error: describeIonError(err) });
+            const v = viewerRef.current as InstanceType<typeof C.Viewer> | null;
+            if (v && !v.isDestroyed()) {
+              v.terrainProvider = new C.EllipsoidTerrainProvider();
+              v.scene.globe.depthTestAgainstTerrain = false;
+            }
+          });
+        }
         const viewer = new C.Viewer(container.current, {
           baseLayer: false, // no default ion/Bing imagery; layers are added below
-          terrain: cfg.terrain === "CESIUM_WORLD_TERRAIN" ? C.Terrain.fromWorldTerrain() : undefined,
+          terrain,
           terrainProvider: cfg.terrain === "ELLIPSOID_NO_TERRAIN" ? new C.EllipsoidTerrainProvider() : undefined,
           geocoder: false, // ion geocoder needs a token; place search lives in the 2D panel
           baseLayerPicker: false,
@@ -94,6 +117,7 @@ export default function Globe3D() {
         });
         viewerRef.current = viewer;
         viewer.scene.globe.depthTestAgainstTerrain = cfg.terrain === "CESIUM_WORLD_TERRAIN";
+        viewer.scene.globe.enableLighting = cfg.terrain === "CESIUM_WORLD_TERRAIN"; // relief shading needs the vertex normals
         const handler = new C.ScreenSpaceEventHandler(viewer.scene.canvas);
         handler.setInputAction((e: { position: InstanceType<typeof C.Cartesian2> }) => {
           const cart = viewer.scene.pickPosition(e.position) ?? viewer.camera.pickEllipsoid(e.position, viewer.scene.globe.ellipsoid);
@@ -187,9 +211,25 @@ export default function Globe3D() {
   return (
     <div className="map-wrap">
       <div ref={container} className="map-target globe-target" data-testid="globe-3d" />
-      <div className={`globe-banner ${cfg.tokenPresent ? "" : "globe-banner--warn"}`}>
-        {cfg.message} Imagery overlays are draped on the surface — not a 3D atmospheric simulation.
+      <div className={`globe-banner ${terrainState.state === "LOADED" ? "" : "globe-banner--warn"}`} data-testid="earth-terrain-status">
+        {terrainState.state === "LOADED" && "3D TERRAIN: Cesium World Terrain is streaming (water mask and vertex normals requested). "}
+        {terrainState.state === "REQUESTED" && "3D TERRAIN: requesting Cesium World Terrain from Cesium ion… "}
+        {terrainState.state === "FAILED" && `3D TERRAIN UNAVAILABLE — ${terrainState.error} The surface shown is a smooth WGS 84 ellipsoid with imagery only: no elevation. `}
+        {terrainState.state === "NOT_REQUESTED" && `${cfg.message} `}
+        Imagery overlays are draped on the surface — not a 3D atmospheric simulation.
       </div>
+      <details className="globe-attribution">
+        <summary>TERRAIN AND IMAGERY SOURCES</summary>
+        <p>
+          Terrain: {terrainState.state === "LOADED" ? "Cesium World Terrain (Cesium ion, streamed)" : "none — smooth WGS 84 ellipsoid"}. Its resolution is not uniform: about 0.5–8 m in
+          selected regions, about 30 m in many regional products, about 30–90 m between 60°S and 60°N and about 1 km for full global coverage. Heights read here are
+          ellipsoidal heights from render tiles, not survey values.
+        </p>
+        <p>
+          Imagery: {earth.base === "OSM" ? "© OpenStreetMap contributors (standard tile layer)" : "NASA GIBS / ESDIS (selected layer and date)"}. Cesium ion data is used under the Cesium ion
+          Terms of Service and is not downloaded or redistributed by this app.
+        </p>
+      </details>
       {status.state === "loading" && <div className="map-error">Loading CesiumJS…</div>}
       {status.state === "error" && <div className="map-error">3D globe failed: {status.error}. Use the 2D map.</div>}
       <div className="globe-tools">

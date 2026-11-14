@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import Feature from "ol/Feature";
 import Point from "ol/geom/Point";
+import Polygon from "ol/geom/Polygon";
+import VectorLayer from "ol/layer/Vector";
+import VectorSource from "ol/source/Vector";
 import type TileLayer from "ol/layer/Tile";
 import type WMTS from "ol/source/WMTS";
 import { Circle as CircleStyle, Fill, RegularShape, Stroke, Style, Text } from "ol/style";
@@ -18,11 +21,13 @@ import {
   type MarsMapHandle,
 } from "../../services/marsMapService";
 import { autoLayerChanges } from "../../services/adaptiveLayers";
+import { coverageRegions } from "../../services/coverageCatalog";
 import { bufferExtent, type TileLoaderHandle } from "../../services/tileLoader";
 import { useAppStore } from "../../store/useAppStore";
 import type { HazardSeverity } from "../../types/api";
 import MapControls from "./MapControls";
 import MapDiagnostics from "./MapDiagnostics";
+import CoverageExplorer from "./CoverageExplorer";
 import MapLegend from "./MapLegend";
 import { RouteOverlay, TerrainOverlay } from "./MapOverlays";
 
@@ -121,7 +126,7 @@ export default function MarsMap() {
     }
     mapController.setHandle(h);
     setMapReady(true);
-    if (import.meta.env.DEV) (window as unknown as { __marsMap?: MarsMapHandle }).__marsMap = h; // dev-only inspection
+    if (import.meta.env.DEV) Object.assign(window as object, { __marsMap: h, __mapController: mapController }); // dev-only inspection
     const { setCursor, setView, selectPoint, patchLayer } = useAppStore.getState();
     // A new map instance has no tile layers yet: reset load state that a previous
     // instance (e.g. before switching planets) left as "ready", so layers reload here.
@@ -238,6 +243,48 @@ export default function MarsMap() {
     if (mapReady) runAutoLayers();
   }, [autoHighRes, mapReady]);
 
+  // --- coverage outlines (Coverage Explorer open)
+  const coverageOpen = useAppStore((s) => s.coverageExplorerOpen);
+  useEffect(() => {
+    const h = handleRef.current;
+    if (!h || !mapReady) return;
+    const src = new VectorSource();
+    if (coverageOpen) {
+      for (const r of coverageRegions(planet)) {
+        for (const l of r.datasets) {
+          const b = l.bbox;
+          const f = new Feature({ geometry: new Polygon([[[b.west, b.south], [b.east, b.south], [b.east, b.north], [b.west, b.north], [b.west, b.south]]]) });
+          f.setStyle(
+            new Style({
+              stroke: new Stroke({ color: l.instrument === "HiRISE" ? "#f2a33a" : "#5fb3d9", width: 1.5, lineDash: l.instrument === "HiRISE" ? undefined : [6, 4] }),
+              fill: new Fill({ color: "rgba(242,163,58,0.06)" }),
+            }),
+          );
+          src.addFeature(f);
+        }
+        const label = new Feature({ geometry: new Point([r.center.lon, r.bbox.north]) });
+        label.setStyle(
+          new Style({
+            text: new Text({
+              text: r.name,
+              offsetY: -10,
+              font: "600 11px Inter, system-ui, sans-serif",
+              fill: new Fill({ color: "#f3efe9" }),
+              stroke: new Stroke({ color: "#14161a", width: 3 }),
+            }),
+            image: new CircleStyle({ radius: 3, fill: new Fill({ color: "#f2a33a" }) }),
+          }),
+        );
+        src.addFeature(label);
+      }
+    }
+    const layer = new VectorLayer({ source: src, zIndex: 99, properties: { role: "coverage" } });
+    h.map.addLayer(layer);
+    return () => {
+      h.map.removeLayer(layer);
+    };
+  }, [coverageOpen, mapReady]);
+
   // --- hazards
   useEffect(() => {
     const src = handleRef.current?.hazardSource;
@@ -286,6 +333,7 @@ export default function MarsMap() {
       {mapReady && <RouteOverlay />}
       <MapLegend />
       <MapDiagnostics planetId={planet} />
+      <CoverageExplorer />
       {failed.length > 0 && (
         <div className="map-error" role="alert">
           {failed.map((l) => (

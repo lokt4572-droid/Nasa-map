@@ -47,7 +47,7 @@ export const PLANETS: Record<PlanetId, PlanetConfig> = {
     availableViews: ["2D"],
     layers: ["mola-global-clrshade", "mola-hrsc-blend-clrshade", "jezero-ctx-ortho", "jezero-hirise-ortho"],
     datasets: ["mola-megdr", "hirise-dtm"],
-    coverage: "Global MOLA; HiRISE/CTX regional (Jezero).",
+    coverage: "Global MOLA, Viking, THEMIS; HiRISE/CTX regional mosaics of landing sites (Jezero, Gale, Gusev, Meridiani, Phoenix, InSight).",
     browserGeolocationAllowed: false,
     conflicts: ["MEGDR uses a 3 396 000 m sphere; the Trek map uses the 3 396 190 m Mars 2000 ellipsoid."],
   },

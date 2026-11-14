@@ -355,3 +355,22 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .cmp-table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 4px; }
 .cmp-table th, .cmp-table td { text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--line); }
 .cmp-table th { color: var(--text-dim); font-weight: 500; }
+
+/* ---------- coverage explorer (v0.3) ---------- */
+.map-btn--on { border-color: var(--accent); color: var(--accent-2); }
+.cov-explorer {
+  position: absolute; left: 60px; top: 10px; z-index: 13; width: min(360px, calc(100% - 80px)); max-height: calc(100% - 60px); overflow-y: auto;
+  background: rgba(24,27,31,.97); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 8px; font-size: 11.5px;
+}
+.cov-explorer__head { display: flex; justify-content: space-between; align-items: center; }
+.cov-explorer__title { font-size: 10.5px; letter-spacing: .1em; color: var(--accent-2); font-weight: 600; }
+.cov-region { border-top: 1px solid var(--line); padding: 6px 0; }
+.cov-region__head { display: flex; flex-direction: column; }
+.cov-region__dem { margin: 2px 0 4px; }
+.cov-region__dem--regional_only, .cov-region__dem--none { color: var(--warn); }
+.cov-region__dem--local_dem { color: var(--ok); }
+.cov-region__dem--error { color: var(--err); }
+.cov-dataset { background: var(--bg-raised); border-radius: var(--radius); padding: 4px 6px; margin-top: 4px; }
+.cov-dataset__row { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+.cov-dataset .layer-card__actions { flex-wrap: wrap; }
+.cov-dataset__meta { word-break: break-all; }

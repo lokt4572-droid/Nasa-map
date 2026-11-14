@@ -114,6 +114,8 @@ interface AppState {
   setLayerVisible: (id: string, visible: boolean) => void;
   /** MAP = 2D map (or Earth's own 2D/Cesium views), GLOBE = Three.js textured globe */
   bodyView: "MAP" | "GLOBE";
+  coverageExplorerOpen: boolean;
+  setCoverageExplorerOpen: (v: boolean) => void;
   setBodyView: (v: "MAP" | "GLOBE") => void;
   /** centre to apply when the 2D map mounts (e.g. "Open in 2D map" from the globe) */
   pendingMapCenter: { lon: number; lat: number; resolution?: number } | null;
@@ -226,6 +228,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   bodyView: "MAP",
   setBodyView: (bodyView) => set({ bodyView }),
+  coverageExplorerOpen: false,
+  setCoverageExplorerOpen: (coverageExplorerOpen) => set({ coverageExplorerOpen }),
   pendingMapCenter: null,
   setPendingMapCenter: (pendingMapCenter) => set({ pendingMapCenter }),
   setLayerVisible: (id, visible) =>

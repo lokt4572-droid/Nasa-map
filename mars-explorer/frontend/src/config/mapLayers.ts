@@ -53,6 +53,12 @@ export interface MarsMapLayer {
   tileMatrixLevelsVerified: number;
   verifiedAt: string;
   notes?: string;
+  /** Regional products: the named region they belong to (Coverage Explorer). */
+  region?: { id: string; name: string; context: string };
+  /** Acquisition date(s) when stated by the source; otherwise "not stated". */
+  acquisition?: string;
+  /** Page where the product is described. */
+  sourceUrl?: string;
 }
 
 const capsUrl = (layerId: string) => `${TREK_WMTS_BASE}/${layerId}/1.0.0/WMTSCapabilities.xml`;
@@ -68,6 +74,63 @@ const common = {
   units: "degrees" as const,
   verifiedAt: "2026-11-12",
 };
+
+const JEZERO = { id: "jezero", name: "Jezero crater", context: "Mars 2020 Perseverance landing site and traverse" };
+
+/**
+ * Regional NASA Trek mosaics of landing sites, found through the Trek catalogue search
+ * (TrekServices searchItems) and checked against each layer's live GetCapabilities on
+ * 2026-11-14: SupportedCRS urn:ogc:def:crs:EPSG::104905, image/png, bbox and level count
+ * below, and a tile at the centre of the bbox returned HTTP 200. The finest tile level of a
+ * Trek pyramid is NOT necessarily the source product's resolution, so no product resolution is
+ * claimed beyond what the pyramid shows.
+ */
+function site(
+  id: string, layerId: string, name: string, instrument: string, region: { id: string; name: string; context: string },
+  bbox: BBox, levels: number,
+): MarsMapLayer {
+  const finestDeg = 0.703125 / 2 ** (levels - 1);
+  const m = (finestDeg * Math.PI * 3_396_190) / 180;
+  return {
+    ...common,
+    id,
+    name,
+    layerId,
+    capabilitiesUrl: capsUrl(layerId),
+    description: `${instrument} image mosaic of the ${region.name} region (${region.context}), served by NASA Mars Trek. Image data, not elevation.`,
+    resolution: `tile pyramid finest level ≈ ${m < 1 ? `${Math.round(m * 100)} cm` : `${m.toFixed(0)} m`}/px`,
+    category: "imagery",
+    visible: false,
+    opacity: 1,
+    defaultEnabled: false,
+    mission: "Mars Reconnaissance Orbiter",
+    instrument,
+    dataKind: "ORTHOIMAGE",
+    coverage: "regional",
+    bbox,
+    format: "image/png",
+    tileMatrixLevelsVerified: levels,
+    verifiedAt: "2026-11-14",
+    region,
+    acquisition: "not stated in GetCapabilities",
+    sourceUrl: "https://trek.nasa.gov/mars/",
+  };
+}
+
+const GALE = { id: "gale", name: "Gale crater", context: "MSL Curiosity landing site" };
+const GUSEV = { id: "gusev", name: "Gusev crater", context: "MER-A Spirit landing site" };
+const MERIDIANI = { id: "meridiani", name: "Meridiani Planum", context: "MER-B Opportunity landing site" };
+const GREEN_VALLEY = { id: "phoenix", name: "Green Valley (Vastitas Borealis)", context: "Phoenix landing site" };
+const ELYSIUM = { id: "insight", name: "Elysium Planitia", context: "InSight landing site" };
+
+const LANDING_SITE_LAYERS: MarsMapLayer[] = [
+  site("gale-ctx-mosaic", "curiosity_ctx_mosaic", "CTX Gale Mosaic", "CTX", GALE, { west: 136.2768326, south: -7.2137273, east: 139.3864225, north: -3.5804738 }, 11),
+  site("gale-hirise-mosaic", "curiosity_hirise_mosaic", "HiRISE Gale Mosaic", "HiRISE", GALE, { west: 137.1224669, south: -4.9254743, east: 137.7298129, north: -4.2489588 }, 17),
+  site("gusev-hirise-mosaic", "spirit_hirise_mosaic", "HiRISE Gusev (Spirit) Mosaic", "HiRISE", GUSEV, { west: 175.4278511, south: -14.6925026, east: 175.5858031, north: -14.5357546 }, 18),
+  site("meridiani-hirise-mosaic", "opportunity_hirise_mosaic", "HiRISE Meridiani (Opportunity) Mosaic", "HiRISE", MERIDIANI, { west: -5.5964391, south: -2.7513281, east: -4.9954112, north: -1.8994384 }, 18),
+  site("phoenix-hirise-mosaic", "phoenix_hirise_mosaic", "HiRISE Phoenix Site Mosaic", "HiRISE", GREEN_VALLEY, { west: -125.8898226, south: 68.165978, east: -125.6607922, north: 68.2499439 }, 17),
+  site("insight-ctx-mosaic", "InSightCTXMosaic_112917", "CTX InSight Site Mosaic", "CTX", ELYSIUM, { west: 133.935732, south: 3.728413, east: 137.2761299, north: 5.0696168 }, 14),
+];
 
 export const MARS_LAYERS: MarsMapLayer[] = [
   {
@@ -176,6 +239,9 @@ export const MARS_LAYERS: MarsMapLayer[] = [
     bbox: { west: 77.1604655, south: 18.2110274, east: 77.6991776, north: 18.7211945 },
     format: "image/png",
     tileMatrixLevelsVerified: 14,
+    region: JEZERO,
+    acquisition: "not stated in GetCapabilities",
+    sourceUrl: "https://trek.nasa.gov/mars/",
   },
   {
     ...common,
@@ -197,7 +263,11 @@ export const MARS_LAYERS: MarsMapLayer[] = [
     bbox: { west: 77.2229331, south: 18.3067994, east: 77.583964, north: 18.669315 },
     format: "image/png",
     tileMatrixLevelsVerified: 18,
+    region: JEZERO,
+    acquisition: "not stated in GetCapabilities",
+    sourceUrl: "https://trek.nasa.gov/mars/",
   },
+  ...LANDING_SITE_LAYERS,
 ];
 
 /** Region shortcuts; extents come from the layer bounding boxes above (GetCapabilities). */

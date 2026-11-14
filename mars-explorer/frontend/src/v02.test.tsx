@@ -13,7 +13,7 @@ describe("settings persistence (bug B8)", () => {
     localStorage.clear();
     expect(loadSettings().lonMode).toBe("180");
     useAppStore.getState().setSettings({ lonMode: "360" });
-    expect(JSON.parse(localStorage.getItem("mars-explorer.settings.v1")!)).toEqual({ lonMode: "360" });
+    expect(JSON.parse(localStorage.getItem("mars-explorer.settings.v1")!)).toEqual({ lonMode: "360", autoHighRes: true });
     expect(loadSettings().lonMode).toBe("360");
   });
 

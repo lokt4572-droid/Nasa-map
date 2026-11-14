@@ -29,6 +29,11 @@ const subscribe = (fn: () => void) =>
   });
 const getVersion = () => version;
 
+/** Re-render when diagnostics change (throttled to <= 1 per 300 ms by the service). */
+export function useDiagnosticsVersion(): number {
+  return useSyncExternalStore(subscribe, getVersion);
+}
+
 function layerName(id: string): string {
   try {
     return getLayerConfig(id).name;
@@ -43,7 +48,7 @@ function layerName(id: string): string {
  * no longer needed (pan/zoom/hide) and are not failures.
  */
 export default function MapDiagnostics({ planetId }: { planetId: string }) {
-  useSyncExternalStore(subscribe, getVersion);
+  useDiagnosticsVersion();
   const [open, setOpen] = useState(false);
   const rows: LayerSummary[] = getSummaries(planetId);
   const inFlight = rows.reduce((n, r) => n + r.inFlight, 0);

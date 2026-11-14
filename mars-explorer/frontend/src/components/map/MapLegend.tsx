@@ -18,7 +18,9 @@ export default function MapLegend() {
             <br />
             {active.dataKind === "COLOR_HILLSHADE"
               ? "Colour hillshade: colours are a visualization of relief, not elevation values."
-              : "Orthoimage: brightness is reflectance, not elevation."}
+              : active.dataKind === "THERMAL_IR_MOSAIC"
+                ? "Thermal infrared: brightness is daytime surface temperature, not reflectance or elevation."
+                : "Orthoimage: brightness is reflectance, not elevation."}
           </div>
           <ul className="legend-list">
             <li>

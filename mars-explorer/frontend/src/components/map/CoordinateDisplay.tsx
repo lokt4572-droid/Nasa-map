@@ -1,6 +1,7 @@
 import { layersForPlanet, bboxContains, getLayerConfig } from "../../config/mapLayers";
 import { formatDistance, formatLat, formatLon, groundResolutionM, niceScaleBar } from "../../config/marsProjection";
 import { PLANETS, planetE2 } from "../../config/planetRegistry";
+import { nativeResolutionDeg, shownAtCenter, viewScale } from "../../services/adaptiveLayers";
 import { useAppStore } from "../../store/useAppStore";
 
 /** Bottom status bar: scale, cursor position, current layer, coverage, loading status. */
@@ -26,6 +27,15 @@ export default function CoordinateDisplay() {
 
   const covered = cursor && active ? bboxContains(active.bbox, cursor.lon, cursor.lat) : null;
 
+  // What is drawn at the view centre, and whether finer data exists there (Phase 2).
+  const states = Object.fromEntries(
+    planetLayers.map((l) => [l.id, layers[l.id] && { ...layers[l.id]!, gridResolutions: layers[l.id]!.grid?.resolutionsDegPerPx ?? null }]),
+  );
+  const center = shownAtCenter(planetLayers, states, view.centerLon ?? 0, view.centerLat, view.resolution);
+  const scale = viewScale(view.resolution, body.radiusEquatorial);
+  const finerHidden = center.finest && center.shown && center.finest.id !== center.shown.id
+    && nativeResolutionDeg(center.finest, states[center.finest.id]?.gridResolutions) < nativeResolutionDeg(center.shown, states[center.shown.id]?.gridResolutions);
+
   return (
     <footer className="statusbar">
       <div className="statusbar__item" title={`Scale on the ${body.name} reference figure (east-west, at view centre latitude)`}>
@@ -41,6 +51,15 @@ export default function CoordinateDisplay() {
       <div className="statusbar__item">
         <span className="label">Layer</span>
         <span>{active?.name ?? "—"}</span>
+      </div>
+      <div className="statusbar__item" data-testid="status-shown" title="Top-most visible layer at the view centre. Different instruments are different measurements, never substitutes.">
+        <span className="label">View</span>
+        <span className="mono">{scale}</span>
+        <span>
+          {center.shown ? `${center.shown.instrument} ${center.shown.resolution ?? ""}` : "no layer"}
+        </span>
+        {center.overzoomed && <span className="warn-text">· beyond native resolution (pixels enlarged)</span>}
+        {finerHidden && center.finest && <span className="muted">· finer here: {center.finest.instrument} {center.finest.resolution}</span>}
       </div>
       <div className="statusbar__item">
         <span className="label">Coverage</span>

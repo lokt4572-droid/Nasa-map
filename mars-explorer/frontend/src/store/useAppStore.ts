@@ -29,6 +29,10 @@ export interface LayerRuntimeState {
   grid: TileGridInfo | null;
   /** bump to force a reload (Retry) */
   attempt: number;
+  /** switched on by auto high-resolution mode (not by the user) */
+  autoEnabled: boolean;
+  /** the user switched it off: auto mode must not switch it back on */
+  autoSuppressed: boolean;
 }
 
 export type SidebarSection =
@@ -92,7 +96,7 @@ interface AppState {
   planet: PlanetId;
   section: SidebarSection;
   cursor: { lon: number; lat: number } | null;
-  view: { resolution: number; centerLat: number; zoom: number };
+  view: { resolution: number; centerLat: number; zoom: number; centerLon?: number; extent?: number[] | null };
   selectedPoint: SelectedPoint | null;
   pointInfo: PointInfo;
   backend: { status: "unknown" | "online" | "offline"; health: HealthResponse | null; error: string | null };
@@ -100,13 +104,15 @@ interface AppState {
   hazards: Remote<Hazard[]>;
   datasets: Remote<Dataset[]>;
   activeMissionId: number | null;
-  settings: { lonMode: "180" | "360"; showSettings: boolean };
+  settings: { lonMode: "180" | "360"; showSettings: boolean; autoHighRes: boolean };
   terrainOverlay: TerrainOverlayState;
   routeDraft: RouteDraft;
   routeResult: Remote<RoutePlanResponse>;
   earth: EarthState;
 
   setLayerVisible: (id: string, visible: boolean) => void;
+  /** auto high-resolution mode changes (never touch activeLayerId or user choices) */
+  applyAutoLayers: (changes: { id: string; visible: boolean }[]) => void;
   setLayerOpacity: (id: string, opacity: number) => void;
   patchLayer: (id: string, patch: Partial<LayerRuntimeState>) => void;
   retryLayer: (id: string) => void;
@@ -143,6 +149,8 @@ function initialLayers(): Record<string, LayerRuntimeState> {
         tiles: { loading: 0, loaded: 0, errors: 0 },
         grid: null,
         attempt: 0,
+        autoEnabled: false,
+        autoSuppressed: false,
       },
     ]),
   );
@@ -150,15 +158,15 @@ function initialLayers(): Record<string, LayerRuntimeState> {
 
 // Settings persist in localStorage (fix for bug B8). Only non-sensitive UI preferences.
 const SETTINGS_KEY = "mars-explorer.settings.v1";
-type Settings = { lonMode: "180" | "360"; showSettings: boolean };
+type Settings = { lonMode: "180" | "360"; showSettings: boolean; autoHighRes: boolean };
 
 export function loadSettings(): Settings {
-  const defaults: Settings = { lonMode: "180", showSettings: false };
+  const defaults: Settings = { lonMode: "180", showSettings: false, autoHighRes: true };
   try {
     const raw = typeof localStorage !== "undefined" ? localStorage.getItem(SETTINGS_KEY) : null;
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as Partial<Settings>;
-    return { ...defaults, lonMode: parsed.lonMode === "360" ? "360" : "180" };
+    return { ...defaults, lonMode: parsed.lonMode === "360" ? "360" : "180", autoHighRes: parsed.autoHighRes !== false };
   } catch {
     return defaults;
   }
@@ -166,7 +174,7 @@ export function loadSettings(): Settings {
 
 function saveSettings(s: Settings): void {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ lonMode: s.lonMode }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ lonMode: s.lonMode, autoHighRes: s.autoHighRes }));
   } catch {
     /* storage unavailable (private mode): settings stay in memory */
   }
@@ -211,9 +219,20 @@ export const useAppStore = create<AppState>((set) => ({
 
   setLayerVisible: (id, visible) =>
     set((s) => ({
-      layers: { ...s.layers, [id]: { ...s.layers[id]!, visible } },
+      // An explicit user choice: auto mode keeps its hands off this layer from now on.
+      layers: { ...s.layers, [id]: { ...s.layers[id]!, visible, autoEnabled: false, autoSuppressed: !visible } },
       activeLayerId: visible ? id : s.activeLayerId,
     })),
+  applyAutoLayers: (changes) =>
+    set((s) => {
+      if (!changes.length) return {};
+      const layers = { ...s.layers };
+      for (const c of changes) {
+        const cur = layers[c.id];
+        if (cur) layers[c.id] = { ...cur, visible: c.visible, autoEnabled: c.visible };
+      }
+      return { layers };
+    }),
   setLayerOpacity: (id, opacity) =>
     set((s) => ({ layers: { ...s.layers, [id]: { ...s.layers[id]!, opacity: Math.min(1, Math.max(0, opacity)) } } })),
   patchLayer: (id, patch) => set((s) => ({ layers: { ...s.layers, [id]: { ...s.layers[id]!, ...patch } } })),

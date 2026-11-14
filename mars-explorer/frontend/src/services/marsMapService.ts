@@ -26,6 +26,7 @@ import { ALL_LAYERS, type BBox, type MarsMapLayer } from "../config/mapLayers";
 import { MARS_GEOGRAPHIC_EXTENT } from "../config/marsProjection";
 import { mapProjectionFor, registerPlanetProjections } from "../config/planetProjections";
 import type { PlanetId } from "../config/planetRegistry";
+import { regionalMaxResolution } from "./adaptiveLayers";
 import { markCapabilitiesPending, recordEvent } from "./mapDiagnostics";
 import { createTileLoader, pathOf, type TileLoaderHandle } from "./tileLoader";
 
@@ -190,19 +191,7 @@ export function describeTileGrid(source: WMTS): TileGridInfo {
   };
 }
 
-/** A regional layer is only rendered once its coverage spans at least this many pixels. */
-export const REGIONAL_MIN_PIXELS = 64;
-
-/**
- * Resolution limit (deg/px) above which a regional layer is not rendered (and so requests no
- * tiles). Without it, a 0.5 deg CTX/HiRISE mosaic requests coarse, mostly empty tiles at the
- * global view and competes with the base map for NASA Trek's ~6 HTTP/1.1 connections.
- */
-export function regionalMaxResolution(layer: MarsMapLayer): number | undefined {
-  if (layer.coverage !== "regional") return undefined;
-  const span = Math.max(layer.bbox.east - layer.bbox.west, layer.bbox.north - layer.bbox.south);
-  return span / REGIONAL_MIN_PIXELS;
-}
+export { REGIONAL_MIN_PIXELS, regionalMaxResolution } from "./adaptiveLayers";
 
 export interface LoadedWmtsLayer {
   tileLayer: TileLayer<WMTS>;

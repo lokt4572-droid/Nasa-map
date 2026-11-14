@@ -17,6 +17,7 @@ import {
   mapController,
   type MarsMapHandle,
 } from "../../services/marsMapService";
+import { autoLayerChanges } from "../../services/adaptiveLayers";
 import { bufferExtent, type TileLoaderHandle } from "../../services/tileLoader";
 import { useAppStore } from "../../store/useAppStore";
 import type { HazardSeverity } from "../../types/api";
@@ -92,6 +93,21 @@ export default function MarsMap() {
   const planet = useAppStore.getState().planet;
   const planetLayers = layersForPlanet(planet);
 
+  // Auto high-resolution mode: switch regional layers on when their coverage is in view and
+  // large enough, off again when it leaves (only layers it switched on itself).
+  const runAutoLayers = () => {
+    const st = useAppStore.getState();
+    const { extent, resolution } = st.view;
+    if (!extent || !resolution) return;
+    const views = Object.fromEntries(
+      planetLayers.map((l) => {
+        const ls = st.layers[l.id];
+        return [l.id, ls && { ...ls, gridResolutions: ls.grid?.resolutionsDegPerPx ?? null }];
+      }),
+    );
+    st.applyAutoLayers(autoLayerChanges(planetLayers, views, extent, resolution, st.settings.autoHighRes));
+  };
+
   // --- map lifecycle
   useEffect(() => {
     const h = createMarsMap(targetRef.current ?? undefined, planet);
@@ -130,13 +146,21 @@ export default function MarsMap() {
     };
     const onMoveEnd = () => {
       const v = h.view;
-      setView({ resolution: v.getResolution() ?? 0, centerLat: v.getCenter()?.[1] ?? 0, zoom: v.getZoom() ?? 0 });
-      // Cancel tile downloads the new view no longer needs (OL itself lets them finish).
       const size = h.map.getSize();
       const res = v.getResolution();
-      if (size && res) {
-        const extent = bufferExtent(v.calculateExtent(size), 0.25);
-        tileLayers.current.forEach((l) => l.prune(extent, res));
+      const extent = size && res ? v.calculateExtent(size) : null;
+      setView({
+        resolution: res ?? 0,
+        centerLat: v.getCenter()?.[1] ?? 0,
+        centerLon: normalizeLon180(v.getCenter()?.[0] ?? 0),
+        zoom: v.getZoom() ?? 0,
+        extent,
+      });
+      if (extent && res) {
+        // Cancel tile downloads the new view no longer needs (OL itself lets them finish).
+        const buffered = bufferExtent(extent, 0.25);
+        tileLayers.current.forEach((l) => l.prune(buffered, res));
+        runAutoLayers();
       }
     };
     h.map.on("pointermove", onMove);
@@ -201,6 +225,11 @@ export default function MarsMap() {
       }
     }
   }, [layers]);
+
+  const autoHighRes = useAppStore((s) => s.settings.autoHighRes);
+  useEffect(() => {
+    if (mapReady) runAutoLayers();
+  }, [autoHighRes, mapReady]);
 
   // --- hazards
   useEffect(() => {

@@ -37,7 +37,7 @@ export interface MarsMapLayer {
   mission: string;
   instrument: string;
   /** What the pixels are. WMTS layers here are always rendered images. */
-  dataKind: "COLOR_HILLSHADE" | "ORTHOIMAGE";
+  dataKind: "COLOR_HILLSHADE" | "ORTHOIMAGE" | "THERMAL_IR_MOSAIC";
   /** Pixels are never numeric elevations for these layers. */
   numericElevation: false;
   coverage: "global" | "regional";
@@ -111,6 +111,50 @@ export const MARS_LAYERS: MarsMapLayer[] = [
     bbox: { west: -180, south: -89.999224, east: 179.9984479, north: 90 },
     format: "image/jpeg",
     tileMatrixLevelsVerified: 9,
+  },
+  {
+    ...common,
+    id: "viking-mdim21-color",
+    name: "Viking MDIM 2.1 Colorized Mosaic",
+    layerId: "Mars_Viking_MDIM21_ClrMosaic_global_232m",
+    capabilitiesUrl: capsUrl("Mars_Viking_MDIM21_ClrMosaic_global_232m"),
+    description:
+      "Viking Orbiter MDIM 2.1 global image mosaic, colorized (USGS). Albedo/surface appearance at 232 m/px; colours are an approximation, not elevation.",
+    resolution: "232 m/px",
+    category: "imagery",
+    visible: false,
+    opacity: 1,
+    defaultEnabled: false,
+    mission: "Viking Orbiter 1 & 2",
+    instrument: "Viking VIS (MDIM 2.1)",
+    dataKind: "ORTHOIMAGE",
+    coverage: "global",
+    bbox: { west: -180, south: -90, east: 180, north: 90 },
+    format: "image/jpeg",
+    tileMatrixLevelsVerified: 10,
+    verifiedAt: "2026-11-14",
+  },
+  {
+    ...common,
+    id: "themis-day-ir-100m",
+    name: "THEMIS Day IR Global Mosaic",
+    layerId: "Mars_MO_THEMIS-IR-Day_mosaic_global_100m_v12_clon0_ly",
+    capabilitiesUrl: capsUrl("Mars_MO_THEMIS-IR-Day_mosaic_global_100m_v12_clon0_ly"),
+    description:
+      "Mars Odyssey THEMIS daytime thermal-infrared global mosaic (v12, 100 m/px). Brightness reflects daytime surface temperature (slope, albedo, thermal inertia), not visible reflectance and not elevation.",
+    resolution: "100 m/px",
+    category: "imagery",
+    visible: false,
+    opacity: 1,
+    defaultEnabled: false,
+    mission: "2001 Mars Odyssey",
+    instrument: "THEMIS IR",
+    dataKind: "THERMAL_IR_MOSAIC",
+    coverage: "global",
+    bbox: { west: -179.9999996, south: -89.9162505, east: 179.9986947, north: 89.9169529 },
+    format: "image/png",
+    tileMatrixLevelsVerified: 11,
+    verifiedAt: "2026-11-14",
   },
   {
     ...common,

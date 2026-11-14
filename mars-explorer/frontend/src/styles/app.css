@@ -374,3 +374,12 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .cov-dataset__row { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
 .cov-dataset .layer-card__actions { flex-wrap: wrap; }
 .cov-dataset__meta { word-break: break-all; }
+
+/* v0.4 3D scene overlays */
+.scene-overlay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 13; max-width: min(520px, 80%); display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 14px; background: var(--bg-panel); border: 1px solid var(--line-strong); border-radius: var(--radius); font-size: 12px; line-height: 1.45; }
+.scene-overlay--warn { border-color: var(--warn); }
+.scene-overlay--error { border-color: var(--err); }
+.scene-overlay__title { font-weight: 600; letter-spacing: .06em; margin-bottom: 2px; }
+.scene-overlay__detail { color: var(--text-dim); }
+.scene-notice { color: var(--warn); }

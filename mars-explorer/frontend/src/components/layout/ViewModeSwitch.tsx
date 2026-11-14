@@ -1,4 +1,5 @@
 import { textureFor } from "../../config/planetTextures";
+import { cesiumBodyFor } from "../../services/planetary/cesiumSceneService";
 import { useAppStore } from "../../store/useAppStore";
 
 type Mode = { id: string; label: string; title: string; active: boolean; select: () => void };
@@ -33,6 +34,15 @@ export default function ViewModeSwitch() {
       title: "Whole-body globe with a global texture (Three.js)",
       active: bodyView === "GLOBE",
       select: () => setBodyView("GLOBE"),
+    });
+  }
+  if (cesiumBodyFor(planet)) {
+    modes.push({
+      id: "tiles",
+      label: "3D TILES",
+      title: "Cesium global 3D Tiles with terrain (needs a Cesium ion token)",
+      active: bodyView === "TILES",
+      select: () => setBodyView("TILES"),
     });
   }
   if (planet === "EARTH") {

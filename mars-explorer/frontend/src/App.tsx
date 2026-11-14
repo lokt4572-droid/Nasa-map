@@ -12,6 +12,8 @@ import ErrorBoundary from "./components/common/ErrorBoundary";
 import { geolocation } from "./services/geolocationService";
 import VenusPreview from "./components/planets/VenusPreview";
 import PlanetGlobe3D from "./components/planetary/PlanetGlobe3D";
+import PlanetScene from "./components/planetary/PlanetScene";
+import { cesiumBodyFor } from "./services/planetary/cesiumSceneService";
 import ViewModeSwitch from "./components/layout/ViewModeSwitch";
 import { textureFor } from "./config/planetTextures";
 import { useBackendHealth, useInitialData, usePointQuery } from "./hooks/useBackendData";
@@ -36,6 +38,8 @@ export default function App() {
         <ErrorBoundary key={`${planet}-${earthView}-${bodyView}`}>
           {planet === "VENUS" ? (
             <VenusPreview />
+          ) : bodyView === "TILES" && cesiumBodyFor(planet) ? (
+            <PlanetScene key={planet} cfg={cesiumBodyFor(planet)!} />
           ) : bodyView === "GLOBE" && textureFor(planet) ? (
             <PlanetGlobe3D key={planet} planet={planet} />
           ) : planet === "EARTH" ? (

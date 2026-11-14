@@ -113,10 +113,10 @@ interface AppState {
 
   setLayerVisible: (id: string, visible: boolean) => void;
   /** MAP = 2D map (or Earth's own 2D/Cesium views), GLOBE = Three.js textured globe */
-  bodyView: "MAP" | "GLOBE";
+  bodyView: "MAP" | "GLOBE" | "TILES";
   coverageExplorerOpen: boolean;
   setCoverageExplorerOpen: (v: boolean) => void;
-  setBodyView: (v: "MAP" | "GLOBE") => void;
+  setBodyView: (v: "MAP" | "GLOBE" | "TILES") => void;
   /** centre to apply when the 2D map mounts (e.g. "Open in 2D map" from the globe) */
   pendingMapCenter: { lon: number; lat: number; resolution?: number } | null;
   setPendingMapCenter: (c: { lon: number; lat: number; resolution?: number } | null) => void;
@@ -266,7 +266,12 @@ export const useAppStore = create<AppState>((set) => ({
         : {
             planet,
             // Keep the globe when the new body has one, otherwise fall back to the map.
-            bodyView: s.bodyView === "GLOBE" && textureFor(planet) ? "GLOBE" : "MAP",
+            bodyView:
+              s.bodyView === "TILES" && (planet === "MARS" || planet === "MOON")
+                ? "TILES"
+                : s.bodyView !== "MAP" && textureFor(planet)
+                  ? "GLOBE"
+                  : "MAP",
             pendingMapCenter: null,
             activeLayerId: defaultLayerFor(planet),
             selectedPoint: null,

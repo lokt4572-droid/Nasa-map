@@ -8,6 +8,9 @@ import type {
   Hazard,
   HealthResponse,
   Mission,
+  RoutePlanResponse,
+  RoutePoint,
+  RouteProfileId,
   SampleResponse,
   SlopeResponse,
 } from "../types/api";
@@ -26,7 +29,24 @@ export interface LayerRuntimeState {
   attempt: number;
 }
 
-export type SidebarSection = "layers" | "terrain" | "science" | "missions" | "hazards" | "data";
+export type SidebarSection = "layers" | "terrain" | "science" | "missions" | "routes" | "hazards" | "data";
+
+export type TerrainProduct = "elevation" | "hillshade" | "slope" | "aspect" | "roughness";
+
+export interface TerrainOverlayState {
+  product: TerrainProduct | null;
+  opacity: number;
+  status: LoadStatus;
+  error: string | null;
+  meta: { min: number | null; max: number | null; units: string; validFraction: number | null; dataset: string } | null;
+}
+
+export interface RouteDraft {
+  start: RoutePoint | null;
+  end: RoutePoint | null;
+  waypoints: RoutePoint[];
+  profile: RouteProfileId;
+}
 
 export interface SelectedPoint {
   lon: number;
@@ -65,6 +85,9 @@ interface AppState {
   datasets: Remote<Dataset[]>;
   activeMissionId: number | null;
   settings: { lonMode: "180" | "360"; showSettings: boolean };
+  terrainOverlay: TerrainOverlayState;
+  routeDraft: RouteDraft;
+  routeResult: Remote<RoutePlanResponse>;
 
   setLayerVisible: (id: string, visible: boolean) => void;
   setLayerOpacity: (id: string, opacity: number) => void;
@@ -82,6 +105,9 @@ interface AppState {
   setDatasets: (r: Remote<Dataset[]>) => void;
   setActiveMission: (id: number | null) => void;
   setSettings: (s: Partial<AppState["settings"]>) => void;
+  setTerrainOverlay: (patch: Partial<TerrainOverlayState>) => void;
+  setRouteDraft: (patch: Partial<RouteDraft>) => void;
+  setRouteResult: (r: Remote<RoutePlanResponse>) => void;
 }
 
 function initialLayers(): Record<string, LayerRuntimeState> {
@@ -102,6 +128,30 @@ function initialLayers(): Record<string, LayerRuntimeState> {
   );
 }
 
+// Settings persist in localStorage (fix for bug B8). Only non-sensitive UI preferences.
+const SETTINGS_KEY = "mars-explorer.settings.v1";
+type Settings = { lonMode: "180" | "360"; showSettings: boolean };
+
+export function loadSettings(): Settings {
+  const defaults: Settings = { lonMode: "180", showSettings: false };
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(SETTINGS_KEY) : null;
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<Settings>;
+    return { ...defaults, lonMode: parsed.lonMode === "360" ? "360" : "180" };
+  } catch {
+    return defaults;
+  }
+}
+
+function saveSettings(s: Settings): void {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ lonMode: s.lonMode }));
+  } catch {
+    /* storage unavailable (private mode): settings stay in memory */
+  }
+}
+
 export const emptyPointInfo = (): PointInfo => ({ coverage: idle(), sample: idle(), slope: idle() });
 
 export const useAppStore = create<AppState>((set) => ({
@@ -117,7 +167,10 @@ export const useAppStore = create<AppState>((set) => ({
   hazards: idle(),
   datasets: idle(),
   activeMissionId: null,
-  settings: { lonMode: "180", showSettings: false },
+  settings: loadSettings(),
+  terrainOverlay: { product: null, opacity: 0.75, status: "idle", error: null, meta: null },
+  routeDraft: { start: null, end: null, waypoints: [], profile: "CONSERVATIVE" },
+  routeResult: idle(),
 
   setLayerVisible: (id, visible) =>
     set((s) => ({
@@ -145,5 +198,13 @@ export const useAppStore = create<AppState>((set) => ({
   setHazards: (hazards) => set({ hazards }),
   setDatasets: (datasets) => set({ datasets }),
   setActiveMission: (activeMissionId) => set({ activeMissionId }),
-  setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+  setSettings: (patch) =>
+    set((s) => {
+      const settings = { ...s.settings, ...patch };
+      saveSettings(settings);
+      return { settings };
+    }),
+  setTerrainOverlay: (patch) => set((s) => ({ terrainOverlay: { ...s.terrainOverlay, ...patch } })),
+  setRouteDraft: (patch) => set((s) => ({ routeDraft: { ...s.routeDraft, ...patch } })),
+  setRouteResult: (routeResult) => set({ routeResult }),
 }));

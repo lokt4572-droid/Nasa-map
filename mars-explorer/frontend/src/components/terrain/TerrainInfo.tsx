@@ -1,5 +1,6 @@
 import { useAppStore } from "../../store/useAppStore";
 import type { TerrainAnalysisStatus } from "../../types/api";
+import TerrainLayers from "./TerrainLayers";
 
 const fmt = (v: number | null | undefined, digits: number, unit = "") =>
   v === null || v === undefined || !Number.isFinite(v) ? "—" : `${v.toFixed(digits)}${unit}`;
@@ -88,6 +89,7 @@ export default function TerrainInfo({ compact = false }: { compact?: boolean }) 
 export function TerrainSection() {
   return (
     <div className="panel-section">
+      <TerrainLayers />
       <TerrainInfo />
       <h4 className="subhead">Metrics and sources</h4>
       <ul className="plain-list">

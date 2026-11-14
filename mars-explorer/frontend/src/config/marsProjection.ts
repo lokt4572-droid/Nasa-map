@@ -112,6 +112,7 @@ export function formatLon(lon: number, mode: "180" | "360" = "180", digits = 4):
 
 export function formatDistance(m: number): string {
   if (!Number.isFinite(m)) return "—";
+  if (m === 0) return "0 m";
   if (m >= 1000) return `${(m / 1000).toFixed(m >= 100_000 ? 0 : 1)} km`;
   if (m >= 1) return `${m.toFixed(m >= 100 ? 0 : 1)} m`;
   return `${(m * 100).toFixed(0)} cm`;

@@ -3,6 +3,7 @@ import DataManager from "../data/DataManager";
 import LayerSelector from "../map/LayerSelector";
 import HazardPanel from "../mission/HazardPanel";
 import MissionPanel from "../mission/MissionPanel";
+import RoutePlanner from "../mission/RoutePlanner";
 import DatasetInfo from "../terrain/DatasetInfo";
 import { TerrainSection } from "../terrain/TerrainInfo";
 
@@ -11,6 +12,7 @@ const SECTIONS: { id: SidebarSection; label: string }[] = [
   { id: "terrain", label: "Terrain" },
   { id: "science", label: "Scientific Data" },
   { id: "missions", label: "Missions" },
+  { id: "routes", label: "Route Planner" },
   { id: "hazards", label: "Hazards" },
   { id: "data", label: "Data Manager" },
 ];
@@ -39,6 +41,7 @@ export default function Sidebar() {
         {section === "terrain" && <TerrainSection />}
         {section === "science" && <DatasetInfo />}
         {section === "missions" && <MissionPanel />}
+        {section === "routes" && <RoutePlanner />}
         {section === "hazards" && <HazardPanel />}
         {section === "data" && <DataManager />}
       </div>

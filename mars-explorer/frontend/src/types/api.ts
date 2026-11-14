@@ -34,6 +34,9 @@ export type DatasetStatus = "AVAILABLE" | "DOWNLOADING" | "PROCESSING" | "VALID"
 export interface Dataset {
   id: number;
   name: string;
+  planet?: string;
+  license?: string;
+  download_url?: string;
   source: string;
   instrument: string;
   product_id: string;
@@ -197,3 +200,52 @@ export interface Hazard extends MarsPointFields {
 export type HazardInput = Omit<Hazard, "id" | "created_at" | "updated_at" | "verification" | "observed_at"> & {
   verification?: HazardVerification;
 };
+
+// ---------------------------------------------------------------- v0.2 routing
+export type RouteProfileId = "CONSERVATIVE" | "STANDARD";
+
+export interface RouteProfile {
+  id: RouteProfileId;
+  description: string;
+  max_slope_deg: number;
+  slope_weight: number;
+  roughness_weight: number;
+  roughness_ref_m: number;
+  allow_unknown_terrain: boolean;
+  unknown_multiplier: number | null;
+  hazard_buffer_m: number;
+  max_unknown_fraction: number;
+  disclaimer: string;
+}
+
+export interface RouteSummary {
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  cells: number;
+  distance_m: number;
+  distance_3d_m: number;
+  total_ascent_m: number;
+  total_descent_m: number;
+  max_step_grade_deg: number;
+  unknown_terrain_distance_m: number;
+  unknown_terrain_fraction: number;
+  elevation_profile: { distance_m: number; elevation_m: number | null }[];
+  overlap_with_primary?: number;
+}
+
+export interface RoutePlanResponse {
+  id: number;
+  status: "ROUTE_FOUND";
+  route: RouteSummary;
+  return_route?: RouteSummary | null;
+  alternative_route?: RouteSummary | null;
+  alternative_note?: string;
+  grid: { rows: number; cols: number; decimation_factor: number; cell_size_m: { dx_min: number; dx_max: number; dy_mean: number }; window_scale?: number | string };
+  profile: RouteProfile;
+  dataset: { id: number; name: string; resolution_m: number | null; vertical_datum: string; source: string };
+  hazards_considered: number;
+  disclaimer: string;
+}
+
+export interface RoutePoint extends MarsPointFields {
+  planet?: string;
+}

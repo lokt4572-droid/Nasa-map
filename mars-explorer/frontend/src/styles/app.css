@@ -231,3 +231,9 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
   .rightpanel--empty { display: none; }
   .header__item:not(.header__item--keep) { display: none; }
 }
+
+/* ---------- charts (v0.2) ---------- */
+.chart { width: 100%; height: auto; background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--radius); }
+.chart__grid { stroke: var(--line); stroke-width: 0.5; }
+.chart__tick { fill: var(--text-faint); font-size: 8px; font-family: var(--mono); }
+.chart__label { fill: var(--text-dim); font-size: 8px; }

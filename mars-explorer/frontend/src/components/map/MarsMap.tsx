@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Feature from "ol/Feature";
 import Point from "ol/geom/Point";
 import type TileLayer from "ol/layer/Tile";
@@ -20,6 +20,7 @@ import { useAppStore } from "../../store/useAppStore";
 import type { HazardSeverity } from "../../types/api";
 import MapControls from "./MapControls";
 import MapLegend from "./MapLegend";
+import { RouteOverlay, TerrainOverlay } from "./MapOverlays";
 
 const SEVERITY_COLOR: Record<HazardSeverity, string> = {
   UNKNOWN: "#9aa3ad",
@@ -83,12 +84,14 @@ export default function MarsMap() {
   const missions = useAppStore((s) => s.missions.data);
   const activeMissionId = useAppStore((s) => s.activeMissionId);
   const selectedPoint = useAppStore((s) => s.selectedPoint);
+  const [mapReady, setMapReady] = useState(false);
 
   // --- map lifecycle
   useEffect(() => {
     const h = createMarsMap(targetRef.current ?? undefined);
     handleRef.current = h;
     mapController.setHandle(h);
+    setMapReady(true);
     if (import.meta.env.DEV) (window as unknown as { __marsMap?: MarsMapHandle }).__marsMap = h; // dev-only inspection
     const { setCursor, setView, selectPoint } = useAppStore.getState();
 
@@ -131,6 +134,7 @@ export default function MarsMap() {
       layersMap.clear();
       h.map.setTarget(undefined);
       mapController.setHandle(null);
+      setMapReady(false);
       handleRef.current = null;
     };
   }, []);
@@ -218,6 +222,8 @@ export default function MarsMap() {
     <div className="map-wrap">
       <div ref={targetRef} className="map-target" data-testid="mars-map" aria-label="Map of Mars" />
       <MapControls />
+      {mapReady && <TerrainOverlay />}
+      {mapReady && <RouteOverlay />}
       <MapLegend />
       {failed.length > 0 && (
         <div className="map-error" role="alert">

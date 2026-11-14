@@ -5,7 +5,7 @@ import { ApiError, describeError } from "../../services/api";
 import { deleteRoute, getRouteProfiles, planRoute } from "../../services/datasetService";
 import { mapController } from "../../services/marsMapService";
 import { useAppStore } from "../../store/useAppStore";
-import type { RoutePoint, RouteProfile, RouteSummary } from "../../types/api";
+import type { RoutePlanResponse, RoutePoint, RouteProfile, RouteSummary } from "../../types/api";
 import LineChart from "../common/LineChart";
 
 function pointLabel(p: RoutePoint | null): string {
@@ -35,6 +35,45 @@ function Summary({ title, r }: { title: string; r: RouteSummary }) {
             <dd className="mono">{(r.overlap_with_primary * 100).toFixed(0)}%</dd>
           </>
         )}
+      </dl>
+    </div>
+  );
+}
+
+function DataQuality({ q }: { q: RoutePlanResponse["data_quality"] }) {
+  const a = q.resolution_assessment;
+  return (
+    <div className="card">
+      {a.astronaut_scale_route_safety === "NOT_SUITABLE" && (
+        <div className="map-error" style={{ position: "static", marginBottom: 6 }} role="alert">
+          <strong>NOT SUITABLE FOR ASTRONAUT-SCALE ROUTE SAFETY.</strong> {a.reason}
+        </div>
+      )}
+      <strong>Input data quality</strong>
+      <dl className="dl small">
+        <dt>Use class</dt>
+        <dd>
+          <span className="status-chip status-chip--t-no-data">{a.class}</span> {a.allowed_use}
+        </dd>
+        <dt>DEM</dt>
+        <dd>
+          {q.dem.name} ({q.dem.instrument}) — dataset {q.dem.resolution_m ? formatDistance(q.dem.resolution_m) : "?"}/cell
+        </dd>
+        <dt>Routing grid cell</dt>
+        <dd className="mono">
+          E–W {formatDistance(q.grid_cell_size_m.dx_min)}…{formatDistance(q.grid_cell_size_m.dx_max)}, N–S {formatDistance(q.grid_cell_size_m.dy_mean)}
+          {q.grid_decimation_factor > 1 ? ` (decimated ×${q.grid_decimation_factor})` : ""}
+        </dd>
+        <dt>Smallest resolvable</dt>
+        <dd className="mono">≈ {formatDistance(a.smallest_resolvable_feature_m)}</dd>
+        <dt>Astronaut-scale safety</dt>
+        <dd className="error-text">{a.astronaut_scale_route_safety.replaceAll("_", " ")}</dd>
+        <dt>NoData in window</dt>
+        <dd className="mono">{(q.window_nodata_fraction * 100).toFixed(1)}%</dd>
+        <dt>Latitude handling</dt>
+        <dd className={q.latitude_handling === "NOT_VERIFIED" ? "warn-text" : ""}>{q.latitude_handling}</dd>
+        <dt>Vertical datum</dt>
+        <dd>{q.dem.vertical_datum}</dd>
       </dl>
     </div>
   );
@@ -167,6 +206,7 @@ export default function RoutePlanner() {
             DEM {r.dataset.name} ({r.dataset.resolution_m ? formatDistance(r.dataset.resolution_m) : "?"}/cell), grid {r.grid.rows}×{r.grid.cols}
             {r.grid.decimation_factor > 1 ? `, decimated ×${r.grid.decimation_factor}` : ""}; {r.hazards_considered} hazard report(s) considered.
           </div>
+          <DataQuality q={r.data_quality} />
           <Summary title="Route" r={r.route} />
           <h5 className="subhead">Elevation profile</h5>
           <LineChart

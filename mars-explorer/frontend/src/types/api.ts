@@ -248,6 +248,26 @@ export interface RoutePlanResponse {
   dataset: { id: number; name: string; resolution_m: number | null; vertical_datum: string; source: string };
   hazards_considered: number;
   disclaimer: string;
+  data_quality: RouteDataQuality;
+}
+
+export interface RouteDataQuality {
+  dem: { id: number; name: string; instrument: string; product_id: string; resolution_m: number | null; vertical_datum: string; crs: string };
+  grid_decimation_factor: number;
+  grid_cell_size_m: { dx_min: number; dx_max: number; dy_mean: number };
+  window_nodata_fraction: number;
+  route_unknown_terrain_fraction: number | null;
+  latitude_handling: string;
+  resolution_assessment: {
+    effective_cell_m: number;
+    dataset_resolution_m: number | null;
+    class: "DETAILED_TRAVERSE_STUDY" | "SITE_RECONNAISSANCE" | "REGIONAL_PLANNING_ONLY";
+    allowed_use: string;
+    smallest_resolvable_feature_m: number;
+    suitable_for_astronaut_scale_route_safety: false;
+    astronaut_scale_route_safety: "NOT_SUITABLE" | "NOT_ASSESSED_NO_VALIDATED_MODEL";
+    reason: string;
+  };
 }
 
 export interface RoutePoint extends MarsPointFields {

@@ -82,6 +82,12 @@ class ValidationReport:
         self.steps.append({"step": name, "status": status, "detail": detail})
 
 
+def combined_checksum(files: list[dict]) -> str:
+    """sha256 over the sorted "name:sha256" lines of all product files (order-independent)."""
+    lines = sorted(f"{Path(f['path']).name}:{(f['sha256'] or '').removeprefix('sha256:')}" for f in files)
+    return "sha256:" + hashlib.sha256("\n".join(lines).encode()).hexdigest()
+
+
 def sha256_file(path: Path, chunk: int = 4 * 1024 * 1024) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
@@ -300,7 +306,14 @@ def register_dataset(
         return None, report, warnings
 
     info = report.info
+    # Integrity covers EVERY file of the product (e.g. PDS4 label + .img data), not just the
+    # file that was passed (bug found in the v0.2 audit: only the 15 kB label was hashed).
+    product_files = [
+        {"path": str(f), "bytes": f.stat().st_size, "sha256": sha256_file(f) if compute_checksum else None}
+        for f in dem_reader.product_files(path)
+    ]
     metadata = info.to_dict()
+    metadata["product_files"] = product_files
     metadata.update(
         statistics=report.statistics,
         control_points=report.control_points,
@@ -331,8 +344,8 @@ def register_dataset(
         coverage_bbox={"crs_units": info.crs_axis_units, **info.bounds},
         observation_date=observation_date,
         download_date=download_date,
-        file_size=path.stat().st_size,
-        checksum=sha256_file(path) if compute_checksum else "",
+        file_size=sum(f["bytes"] for f in product_files),
+        checksum=combined_checksum(product_files) if compute_checksum else "",
         license=license,
         download_url=download_url,
         is_validated=True,

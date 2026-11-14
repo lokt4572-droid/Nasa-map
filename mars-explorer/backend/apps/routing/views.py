@@ -19,7 +19,7 @@ from services import dataset_manager, dem_reader
 from services.mars_coordinates import resolve_crs, transform_point
 
 from .models import Route
-from .profiles import PROFILES, get_profile
+from .profiles import PROFILES, assess_resolution, get_profile
 from .services import pathfinder
 
 logger = logging.getLogger("mars.routing")
@@ -82,6 +82,27 @@ def _hazards_in_query_crs(query_crs, crs_id: str) -> list[tuple[float, float, fl
     return out
 
 
+def _data_quality(ds, grid: dict, lat_conv: str, route: dict | None) -> dict:
+    """Resolution and quality of the terrain data the planner actually used."""
+    cs = grid.get("cell_size_m") or {}
+    effective = max(cs.get("dx_max") or 0.0, cs.get("dy_mean") or 0.0)
+    known = {"PLANETOCENTRIC", "PLANETOGRAPHIC"}
+    if lat_conv in known and ds.latitude_convention in known:
+        lat_status = "NONE" if lat_conv == ds.latitude_convention else f"CONVERTED_{lat_conv}_TO_{ds.latitude_convention}"
+    else:
+        lat_status = "NOT_VERIFIED"
+    return {
+        "dem": {"id": ds.id, "name": ds.name, "instrument": ds.instrument, "product_id": ds.product_id,
+                "resolution_m": ds.resolution_meters, "vertical_datum": ds.vertical_datum, "crs": ds.crs_name},
+        "grid_decimation_factor": grid.get("decimation_factor"),
+        "grid_cell_size_m": cs,
+        "window_nodata_fraction": grid.get("nodata_fraction"),
+        "route_unknown_terrain_fraction": route["unknown_terrain_fraction"] if route else None,
+        "latitude_handling": lat_status,
+        "resolution_assessment": assess_resolution(effective, ds.resolution_meters),
+    }
+
+
 @api_view(["POST"])
 def plan(request):
     ser = RoutePlanRequestSerializer(data=request.data)
@@ -116,10 +137,13 @@ def plan(request):
             hazards_query=hazards, include_return=v["include_return"], include_alternative=v["include_alternative"],
         )
     except pathfinder.RoutePlanningError as exc:
-        return _failure(exc.status, exc.reason, {**exc.details, "dataset": ds.name, "profile": profile.to_dict()})
+        grid = exc.details.get("grid") or {}
+        return _failure(exc.status, exc.reason, {**exc.details, "dataset": ds.name, "profile": profile.to_dict(),
+                                                 "data_quality": _data_quality(ds, grid, lat_conv, None)})
     except dem_reader.RasterReadError as exc:
         raise ApiError(str(exc), code="DEM_READ_ERROR", status_code=500) from exc
 
+    result["data_quality"] = _data_quality(ds, result["grid"], lat_conv, result["route"])
     result.update(
         profile=profile.to_dict(),
         dataset={"id": ds.id, "name": ds.name, "resolution_m": ds.resolution_meters, "vertical_datum": ds.vertical_datum, "source": ds.source},

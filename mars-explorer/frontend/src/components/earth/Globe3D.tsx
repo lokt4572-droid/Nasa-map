@@ -15,18 +15,37 @@ import { useAppStore } from "../../store/useAppStore";
 
 export type TerrainMode = "CESIUM_WORLD_TERRAIN" | "ELLIPSOID_NO_TERRAIN";
 
-/** Decide the terrain mode from the configured token (pure; unit-tested). */
-export function globeConfig(token: string | undefined): { terrain: TerrainMode; tokenPresent: boolean; message: string } {
+/**
+ * The 3D GLOBE (CesiumJS viewer: rotating Earth with imagery) and 3D TERRAIN (real relief from
+ * a terrain provider) are separate things. The globe always works; terrain needs Cesium terrain
+ * configuration (an ion token for Cesium World Terrain, or a self-hosted terrain tile server).
+ * Decided from the token only (pure; unit-tested).
+ */
+export function globeConfig(token: string | undefined): {
+  globe: "AVAILABLE";
+  terrain: TerrainMode;
+  terrainStatus: "REQUIRES_CESIUM_TERRAIN_CONFIGURATION" | "CONFIGURED_NOT_VERIFIED";
+  tokenPresent: boolean;
+  message: string;
+} {
   const t = (token ?? "").trim();
   if (!t) {
     return {
+      globe: "AVAILABLE",
       terrain: "ELLIPSOID_NO_TERRAIN",
+      terrainStatus: "REQUIRES_CESIUM_TERRAIN_CONFIGURATION",
       tokenPresent: false,
       message:
-        "NO TERRAIN — Cesium ion token not set. The globe is a smooth ellipsoid (no mountains/valleys). Set VITE_CESIUM_ION_TOKEN in frontend/.env.local, use the 2D map, or serve local terrain tiles (docs/OFFLINE_MODE.md).",
+        "3D GLOBE without 3D TERRAIN — real relief requires Cesium terrain configuration (VITE_CESIUM_ION_TOKEN in frontend/.env.local, or a self-hosted terrain server). The surface shown is a smooth WGS 84 ellipsoid: no mountains or valleys.",
     };
   }
-  return { terrain: "CESIUM_WORLD_TERRAIN", tokenPresent: true, message: "Cesium World Terrain (Cesium ion; quotas of your ion plan apply)." };
+  return {
+    globe: "AVAILABLE",
+    terrain: "CESIUM_WORLD_TERRAIN",
+    terrainStatus: "CONFIGURED_NOT_VERIFIED",
+    tokenPresent: true,
+    message: "3D GLOBE with Cesium World Terrain requested via your ion token (not verified by this project; ion plan quotas apply).",
+  };
 }
 
 const TOKEN = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
@@ -218,8 +237,12 @@ export function GlobeControls() {
         </button>
       </div>
       <div className="kv">
-        <span className="label">Terrain</span>
-        <span className={`status-chip ${cfg.tokenPresent ? "status-chip--ready" : "status-chip--error"}`}>{cfg.terrain}</span>
+        <span className="label">3D globe</span>
+        <span className="status-chip status-chip--ready">{cfg.globe}</span>
+      </div>
+      <div className="kv">
+        <span className="label">3D terrain</span>
+        <span className={`status-chip ${cfg.tokenPresent ? "status-chip--t-no-data" : "status-chip--error"}`}>{cfg.terrainStatus}</span>
       </div>
       <p className="hint small">{cfg.message}</p>
       <p className="hint small">

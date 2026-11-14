@@ -61,7 +61,7 @@ def _store(key, provider, data_type, payload, ttl):
     return snap
 
 
-def _envelope(snap, lat, lon, data: dict, units: dict, valid_time, timezone_name, extra=None) -> dict:
+def _envelope(snap, lat, lon, data: dict, units: dict, valid_time, timezone_name, extra=None, fetched_now: bool = False) -> dict:
     age = (timezone.now() - snap.retrieved_at).total_seconds()
     return {
         "provider": snap.provider,
@@ -70,7 +70,8 @@ def _envelope(snap, lat, lon, data: dict, units: dict, valid_time, timezone_name
         "valid_time": valid_time,
         "retrieved_at": snap.retrieved_at.isoformat(),
         "cache_age_s": round(age, 1),
-        "from_cache": age > 1.0,
+        # True when this answer was NOT fetched from the provider for this request.
+        "from_cache": not fetched_now,
         "timezone": timezone_name,
         "units": units,
         "data": data,
@@ -79,10 +80,11 @@ def _envelope(snap, lat, lon, data: dict, units: dict, valid_time, timezone_name
     }
 
 
-def open_meteo_forecast(lat: float, lon: float) -> tuple[Any, float, float]:
+def open_meteo_forecast(lat: float, lon: float) -> tuple[Any, float, float, bool]:
     lat, lon = _round(lat), _round(lon)
     key = f"om:{lat}:{lon}"
     snap = _cached(key)
+    fetched = snap is None
     if not snap:
         payload = http_client.get_json("Open-Meteo", OPEN_METEO_URL, {
             "latitude": lat, "longitude": lon,
@@ -92,7 +94,7 @@ def open_meteo_forecast(lat: float, lon: float) -> tuple[Any, float, float]:
         if not isinstance(payload, dict) or "current" not in payload:
             raise http_client.ProviderBadResponse("Open-Meteo", "Open-Meteo response has no 'current' block")
         snap = _store(key, "Open-Meteo", "forecast_model", payload, FORECAST_TTL)
-    return snap, lat, lon
+    return snap, lat, lon, fetched
 
 
 def _missing(block: dict | None, wanted: list[str]) -> list[str]:
@@ -101,7 +103,7 @@ def _missing(block: dict | None, wanted: list[str]) -> list[str]:
 
 
 def current(lat: float, lon: float) -> dict:
-    snap, lat, lon = open_meteo_forecast(lat, lon)
+    snap, lat, lon, fetched = open_meteo_forecast(lat, lon)
     p = snap.payload
     cur = {k: v for k, v in (p.get("current") or {}).items() if k not in ("time", "interval")}
     return _envelope(snap, lat, lon, cur, {k: v for k, v in (p.get("current_units") or {}).items() if k not in ("time", "interval")},
@@ -110,18 +112,18 @@ def current(lat: float, lon: float) -> dict:
                          "missing_variables": _missing(p.get("current"), CURRENT_VARS),
                          "today": {k: (p.get("daily") or {}).get(k, [None])[0] for k in ("sunrise", "sunset", "precipitation_probability_max")},
                          "note": "Model forecast for the grid cell, not a measurement at the point.",
-                     })
+                     }, fetched_now=fetched)
 
 
 def forecast(lat: float, lon: float) -> dict:
-    snap, lat, lon = open_meteo_forecast(lat, lon)
+    snap, lat, lon, fetched = open_meteo_forecast(lat, lon)
     p = snap.payload
     return _envelope(snap, lat, lon, {"hourly": p.get("hourly"), "daily": p.get("daily")},
                      {"hourly": p.get("hourly_units"), "daily": p.get("daily_units")}, None, p.get("timezone"), {
                          "model_grid_cell": {"latitude": p.get("latitude"), "longitude": p.get("longitude"), "elevation_m": p.get("elevation")},
                          "missing_variables": _missing(p.get("hourly"), HOURLY_VARS) + _missing(p.get("daily"), DAILY_VARS),
                          "forecast_days": 7,
-                     })
+                     }, fetched_now=fetched)
 
 
 def parse_date(value: str, name: str) -> dt.date:
@@ -145,6 +147,7 @@ def historical(lat: float, lon: float, start: dt.date, end: dt.date) -> dict:
     lat, lon = _round(lat), _round(lon)
     key = f"power:{lat}:{lon}:{start:%Y%m%d}:{end:%Y%m%d}"
     snap = _cached(key)
+    fetched = snap is None
     if not snap:
         payload = http_client.get_json("NASA POWER", POWER_URL, {
             "parameters": ",".join(POWER_PARAMS), "community": "RE", "longitude": lon, "latitude": lat,
@@ -169,7 +172,7 @@ def historical(lat: float, lon: float, start: dt.date, end: dt.date) -> dict:
                          "fill_value": fill,
                          "missing_variables": [k for k in POWER_PARAMS if k not in params],
                          "note": "Daily reanalysis/satellite-derived values on a coarse grid; not a forecast and not station data.",
-                     })
+                     }, fetched_now=fetched)
 
 
 def status() -> dict:

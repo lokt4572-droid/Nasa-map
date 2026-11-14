@@ -326,3 +326,19 @@ def read_label_text(path: str | Path, max_bytes: int = 2_000_000) -> str | None:
             with c.open("rb") as fh:
                 return fh.read(max_bytes).decode("utf-8", errors="replace")
     return None
+
+
+def product_files(path: str | Path) -> list[Path]:
+    """All files GDAL reads for this product (label + data files), primary file first."""
+    rasterio = _import_rasterio()
+    p = Path(path).resolve()
+    with rasterio.open(p) as src:
+        files = [Path(f).resolve() for f in (src.files or [str(p)])]
+    if p not in files:
+        files.insert(0, p)
+    seen, out = set(), []
+    for f in files:
+        if f not in seen and f.is_file():
+            seen.add(f)
+            out.append(f)
+    return out

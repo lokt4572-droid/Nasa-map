@@ -48,9 +48,11 @@ class WeatherApiTests(TestCase):
         self.assertEqual(b["missing_variables"][:2], ["relative_humidity_2m", "apparent_temperature"])
         self.assertIn("Open-Meteo", b["attribution"])
         self.assertIsNotNone(b["retrieved_at"])
-        # second call for the same (rounded) point uses the cache, not the provider
-        self.c.get("/api/v1/weather/forecast/", {"lat": 55.751, "lon": 37.621})
+        self.assertFalse(b["from_cache"])
+        # second call for the same (rounded) point uses the cache, not the provider, and says so
+        b2 = self.c.get("/api/v1/weather/forecast/", {"lat": 55.751, "lon": 37.621}).json()
         self.assertEqual(m.call_count, 1)
+        self.assertTrue(b2["from_cache"])
 
     @mock.patch("services.http_client.get_json", return_value=OM)
     def test_expired_cache_is_refreshed_not_relabelled(self, m):

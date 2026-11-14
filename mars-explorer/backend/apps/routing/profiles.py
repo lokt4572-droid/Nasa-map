@@ -78,3 +78,47 @@ def get_profile(profile_id: str) -> MovementProfile:
         return PROFILES[profile_id.upper()]
     except KeyError as exc:
         raise ValueError(f"Unknown profile {profile_id!r}; expected one of {', '.join(PROFILES)}") from exc
+
+
+# ---------------------------------------------------------------------------
+# DEM resolution suitability (v0.2 audit).
+#
+# A DEM cell hides everything smaller than itself: with a 14.8 km MOLA cell, craters,
+# boulder fields and scarps hundreds of metres wide are invisible. The classes below say
+# what a route on a given grid can be used for. They are engineering limits, not validated
+# human-factors criteria. NO class makes a route "safe": astronaut-scale route safety
+# needs metre-scale DTMs AND a validated traversability model, which this software does not
+# have, so `astronaut_scale_route_safety` is never "SUITABLE".
+
+ASTRONAUT_SCALE_MAX_CELL_M = 1.0  # cell size at which boulder/step-scale relief starts to be resolvable
+
+RESOLUTION_CLASSES = [
+    # (max effective cell size in metres, class, what the route may be used for)
+    (2.0, "DETAILED_TRAVERSE_STUDY", "metre-scale DTM: detailed traverse studies; still not a validated safety assessment"),
+    (100.0, "SITE_RECONNAISSANCE", "site-scale planning (e.g. CTX/HRSC DTM): landforms visible, rocks and small craters are not"),
+    (float("inf"), "REGIONAL_PLANNING_ONLY", "regional overview only (e.g. global MOLA): kilometre-scale terrain; unsuitable for astronaut-scale routes"),
+]
+
+
+def assess_resolution(effective_cell_m: float, dataset_resolution_m: float | None) -> dict:
+    """Classify a routing grid by its coarsest cell size (after any decimation)."""
+    cell = max(effective_cell_m, dataset_resolution_m or 0.0)
+    for max_cell, cls, use in RESOLUTION_CLASSES:
+        if cell <= max_cell:
+            break
+    return {
+        "effective_cell_m": round(cell, 3),
+        "dataset_resolution_m": dataset_resolution_m,
+        "class": cls,
+        "allowed_use": use,
+        # Features narrower than ~2 cells cannot be represented on the grid (sampling limit).
+        "smallest_resolvable_feature_m": round(2 * cell, 1),
+        "suitable_for_astronaut_scale_route_safety": False,
+        "astronaut_scale_route_safety": "NOT_SUITABLE" if cell > ASTRONAUT_SCALE_MAX_CELL_M else "NOT_ASSESSED_NO_VALIDATED_MODEL",
+        "reason": (
+            f"The routing grid resolves nothing smaller than ~{2 * cell:,.0f} m. "
+            + ("Astronaut-scale hazards (rocks, small craters, steps) are invisible at this resolution."
+               if cell > ASTRONAUT_SCALE_MAX_CELL_M
+               else "Resolution is metre-scale, but no validated traversability model exists in this software.")
+        ),
+    }

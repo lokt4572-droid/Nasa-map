@@ -136,9 +136,10 @@ describe("geolocation service", () => {
 
 describe("3D globe configuration", () => {
   it("never claims terrain without a token", () => {
-    expect(globeConfig(undefined)).toMatchObject({ terrain: "ELLIPSOID_NO_TERRAIN", tokenPresent: false });
-    expect(globeConfig("  ").message).toContain("NO TERRAIN");
-    expect(globeConfig("abc.def")).toMatchObject({ terrain: "CESIUM_WORLD_TERRAIN", tokenPresent: true });
+    expect(globeConfig(undefined)).toMatchObject({ globe: "AVAILABLE", terrain: "ELLIPSOID_NO_TERRAIN", terrainStatus: "REQUIRES_CESIUM_TERRAIN_CONFIGURATION", tokenPresent: false });
+    expect(globeConfig("  ").message).toContain("without 3D TERRAIN");
+    // a token only REQUESTS terrain; the project has not verified it
+    expect(globeConfig("abc.def")).toMatchObject({ terrain: "CESIUM_WORLD_TERRAIN", terrainStatus: "CONFIGURED_NOT_VERIFIED", tokenPresent: true });
   });
 });
 

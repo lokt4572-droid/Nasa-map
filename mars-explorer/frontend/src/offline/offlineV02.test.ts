@@ -59,6 +59,9 @@ describe("ZIP mission package", () => {
     }
     expect(manifest.files.every((f) => /^[0-9a-f]{64}$/.test(f.sha256))).toBe(true);
     expect(manifest.offline_ready).toBe(false);
+    // independent of map tiles: the package never carries tile images
+    expect(names.filter((n) => n.includes("/imagery/"))).toEqual(["mission_package/imagery/README.txt"]);
+    expect(names.some((n) => /\.(png|jpe?g|webp)$/i.test(n))).toBe(false);
     const r = await readMissionZip(zip, "MARS");
     expect(r.ok).toBe(true);
     expect(r.hazards.map((h) => h.id)).toEqual([9]); // only this mission's hazards

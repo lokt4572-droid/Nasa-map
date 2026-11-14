@@ -237,3 +237,14 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .chart__grid { stroke: var(--line); stroke-width: 0.5; }
 .chart__tick { fill: var(--text-faint); font-size: 8px; font-family: var(--mono); }
 .chart__label { fill: var(--text-dim); font-size: 8px; }
+
+/* ---------- planet switcher + planet screens (v0.2) ---------- */
+.planet-switcher { display: flex; gap: 2px; margin-left: 8px; }
+.planet-btn {
+  background: transparent; border: 1px solid var(--line-strong); color: var(--text-dim); padding: 4px 9px;
+  font: inherit; font-size: 11px; letter-spacing: .08em; cursor: pointer; border-radius: var(--radius);
+}
+.planet-btn:hover { color: var(--text); border-color: var(--accent); }
+.planet-btn--active { background: var(--accent); border-color: var(--accent); color: #1a0f0a; font-weight: 700; }
+.planet-btn--exp:not(.planet-btn--active) { border-style: dashed; }
+.planet-screen { position: absolute; inset: 0; overflow-y: auto; padding: 24px; max-width: 760px; }

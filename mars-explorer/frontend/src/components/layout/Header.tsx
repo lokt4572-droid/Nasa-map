@@ -1,4 +1,5 @@
 import { getLayerConfig } from "../../config/mapLayers";
+import PlanetSwitcher from "./PlanetSwitcher";
 import { formatLat, formatLon } from "../../config/marsProjection";
 import { useOnlineStatus } from "../../hooks/useBackendData";
 import { API_BASE_URL } from "../../services/api";
@@ -7,7 +8,8 @@ import { useAppStore } from "../../store/useAppStore";
 export default function Header() {
   const backend = useAppStore((s) => s.backend);
   const cursor = useAppStore((s) => s.cursor);
-  const activeLayer = getLayerConfig(useAppStore((s) => s.activeLayerId));
+  const activeLayerId = useAppStore((s) => s.activeLayerId);
+  const activeLayer = activeLayerId ? getLayerConfig(activeLayerId) : null;
   const missions = useAppStore((s) => s.missions.data);
   const activeMissionId = useAppStore((s) => s.activeMissionId);
   const settings = useAppStore((s) => s.settings);
@@ -24,13 +26,14 @@ export default function Header() {
         <span className="brand">MARS EXPLORER</span>
         <span className="version">v0.1 · technical preview</span>
       </div>
+      <PlanetSwitcher />
       <div className="header__item">
         <span className="label">Expedition</span>
         <span>{mission ? `${mission.name}${mission.demo_mode ? " (DEMO)" : ""}` : "none selected"}</span>
       </div>
       <div className="header__item">
         <span className="label">Layer</span>
-        <span>{activeLayer.name}</span>
+        <span>{activeLayer?.name ?? "—"}</span>
       </div>
       <div className="header__item header__cursor">
         <span className="label">Cursor</span>

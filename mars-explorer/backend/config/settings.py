@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "apps.hazards",
     "apps.terrain",
     "apps.routing",
+    "apps.planets",
 ]
 
 MIDDLEWARE = [

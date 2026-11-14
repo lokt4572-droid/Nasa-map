@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
-import { MARS_LAYERS } from "../config/mapLayers";
+import { ALL_LAYERS, layersForPlanet } from "../config/mapLayers";
+import { DEFAULT_PLANET, type PlanetId } from "../config/planetRegistry";
 import type { TileGridInfo, TileStats } from "../services/marsMapService";
 import type {
   CoverageResponse,
@@ -74,6 +75,7 @@ export interface PointInfo {
 interface AppState {
   layers: Record<string, LayerRuntimeState>;
   activeLayerId: string;
+  planet: PlanetId;
   section: SidebarSection;
   cursor: { lon: number; lat: number } | null;
   view: { resolution: number; centerLat: number; zoom: number };
@@ -94,6 +96,7 @@ interface AppState {
   patchLayer: (id: string, patch: Partial<LayerRuntimeState>) => void;
   retryLayer: (id: string) => void;
   setActiveLayer: (id: string) => void;
+  setPlanet: (planet: PlanetId) => void;
   setSection: (s: SidebarSection) => void;
   setCursor: (c: { lon: number; lat: number } | null) => void;
   setView: (v: AppState["view"]) => void;
@@ -112,7 +115,7 @@ interface AppState {
 
 function initialLayers(): Record<string, LayerRuntimeState> {
   return Object.fromEntries(
-    MARS_LAYERS.map((l) => [
+    ALL_LAYERS.map((l) => [
       l.id,
       {
         visible: l.defaultEnabled,
@@ -152,11 +155,18 @@ function saveSettings(s: Settings): void {
   }
 }
 
+/** Default layer of a body ("" for bodies without a map service). */
+export function defaultLayerFor(planet: PlanetId): string {
+  const ls = layersForPlanet(planet);
+  return (ls.find((l) => l.defaultEnabled) ?? ls[0])?.id ?? "";
+}
+
 export const emptyPointInfo = (): PointInfo => ({ coverage: idle(), sample: idle(), slope: idle() });
 
 export const useAppStore = create<AppState>((set) => ({
   layers: initialLayers(),
-  activeLayerId: MARS_LAYERS.find((l) => l.defaultEnabled)?.id ?? MARS_LAYERS[0]!.id,
+  activeLayerId: defaultLayerFor(DEFAULT_PLANET),
+  planet: DEFAULT_PLANET,
   section: "layers",
   cursor: null,
   view: { resolution: 0.3515625, centerLat: 0, zoom: 1 },
@@ -188,6 +198,20 @@ export const useAppStore = create<AppState>((set) => ({
       },
     })),
   setActiveLayer: (id) => set({ activeLayerId: id }),
+  setPlanet: (planet) =>
+    set((s) =>
+      s.planet === planet
+        ? {}
+        : {
+            planet,
+            activeLayerId: defaultLayerFor(planet),
+            selectedPoint: null,
+            pointInfo: emptyPointInfo(),
+            cursor: null,
+            section: "layers",
+            terrainOverlay: { ...s.terrainOverlay, product: null, meta: null, status: "idle" },
+          },
+    ),
   setSection: (section) => set({ section }),
   setCursor: (cursor) => set({ cursor }),
   setView: (view) => set({ view }),

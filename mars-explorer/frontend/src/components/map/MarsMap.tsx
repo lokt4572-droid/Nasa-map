@@ -5,8 +5,9 @@ import type TileLayer from "ol/layer/Tile";
 import type WMTS from "ol/source/WMTS";
 import { Circle as CircleStyle, Fill, RegularShape, Stroke, Style, Text } from "ol/style";
 
-import { MARS_LAYERS } from "../../config/mapLayers";
-import { TREK_DECLARED_CRS, normalizeLon180 } from "../../config/marsProjection";
+import { layersForPlanet } from "../../config/mapLayers";
+import { normalizeLon180 } from "../../config/marsProjection";
+import { PLANETS } from "../../config/planetRegistry";
 import { describeError } from "../../services/api";
 import {
   WmtsLayerError,
@@ -85,15 +86,23 @@ export default function MarsMap() {
   const activeMissionId = useAppStore((s) => s.activeMissionId);
   const selectedPoint = useAppStore((s) => s.selectedPoint);
   const [mapReady, setMapReady] = useState(false);
+  // The component is remounted per body (key={planet} in App), so planet is fixed here.
+  const planet = useAppStore.getState().planet;
+  const planetLayers = layersForPlanet(planet);
 
   // --- map lifecycle
   useEffect(() => {
-    const h = createMarsMap(targetRef.current ?? undefined);
+    const h = createMarsMap(targetRef.current ?? undefined, planet);
     handleRef.current = h;
     mapController.setHandle(h);
     setMapReady(true);
     if (import.meta.env.DEV) (window as unknown as { __marsMap?: MarsMapHandle }).__marsMap = h; // dev-only inspection
-    const { setCursor, setView, selectPoint } = useAppStore.getState();
+    const { setCursor, setView, selectPoint, patchLayer } = useAppStore.getState();
+    // A new map instance has no tile layers yet: reset load state that a previous
+    // instance (e.g. before switching planets) left as "ready", so layers reload here.
+    for (const cfg of planetLayers) {
+      patchLayer(cfg.id, { status: "idle", error: null, errorCode: null, grid: null, tiles: { loading: 0, loaded: 0, errors: 0 } });
+    }
 
     let frame = 0;
     const onMove = (evt: { coordinate: number[]; dragging: boolean }) => {
@@ -112,7 +121,7 @@ export default function MarsMap() {
       selectPoint({
         lon: normalizeLon180(x),
         lat: y,
-        crs: TREK_DECLARED_CRS,
+        crs: PLANETS[planet].mapCrs!,
         layerId: st.activeLayerId,
         pickedAt: new Date().toISOString(),
       });
@@ -144,7 +153,7 @@ export default function MarsMap() {
     const h = handleRef.current;
     if (!h) return;
     const { patchLayer } = useAppStore.getState();
-    for (const cfg of MARS_LAYERS) {
+    for (const cfg of planetLayers) {
       const st = layers[cfg.id];
       if (!st) continue;
       const existing = tileLayers.current.get(cfg.id);
@@ -216,7 +225,7 @@ export default function MarsMap() {
     }
   }, [selectedPoint]);
 
-  const failed = MARS_LAYERS.filter((l) => layers[l.id]?.visible && layers[l.id]?.status === "error");
+  const failed = planetLayers.filter((l) => layers[l.id]?.visible && layers[l.id]?.status === "error");
 
   return (
     <div className="map-wrap">

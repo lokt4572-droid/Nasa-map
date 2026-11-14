@@ -1,10 +1,12 @@
-import { MARS_LAYERS } from "../../config/mapLayers";
+import { layersForPlanet } from "../../config/mapLayers";
 import { mapController } from "../../services/marsMapService";
 import { useAppStore } from "../../store/useAppStore";
 
 const STATUS_LABEL = { idle: "NOT LOADED", loading: "LOADING", ready: "READY", error: "ERROR" } as const;
 
 export default function LayerSelector() {
+  const planet = useAppStore((s) => s.planet);
+  const planetLayers = layersForPlanet(planet);
   const layers = useAppStore((s) => s.layers);
   const activeLayerId = useAppStore((s) => s.activeLayerId);
   const { setLayerVisible, setLayerOpacity, setActiveLayer, retryLayer } = useAppStore.getState();
@@ -15,7 +17,7 @@ export default function LayerSelector() {
         NASA Mars Trek WMTS layers. Tile grids are read from each layer's GetCapabilities. Pixels are imagery, never
         elevation values.
       </p>
-      {MARS_LAYERS.map((cfg) => {
+      {planetLayers.map((cfg) => {
         const st = layers[cfg.id]!;
         return (
           <div key={cfg.id} className={`layer-card ${activeLayerId === cfg.id ? "layer-card--active" : ""}`}>

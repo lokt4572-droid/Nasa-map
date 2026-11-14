@@ -75,6 +75,7 @@ export function useInitialData(): void {
  */
 export function usePointQuery(): void {
   const point = useAppStore((s) => s.selectedPoint);
+  const planet = useAppStore((s) => s.planet);
   const setPointInfo = useAppStore((s) => s.setPointInfo);
   useEffect(() => {
     if (!point) return;
@@ -89,7 +90,7 @@ export function usePointQuery(): void {
       setPointInfo({ coverage: { status: "loading", data: null, error: null } });
       let coverage;
       try {
-        coverage = await getCoverage(point.lon, point.lat, ctrl.signal);
+        coverage = await getCoverage(point.lon, point.lat, ctrl.signal, planet);
         setPointInfo({ coverage: { status: "ready", data: coverage, error: null } });
       } catch (err) {
         if (!ctrl.signal.aborted) setPointInfo({ coverage: fail(err) });
@@ -98,8 +99,8 @@ export function usePointQuery(): void {
       if (coverage.terrain_analysis_status !== "AVAILABLE") return;
       setPointInfo({ sample: { status: "loading", data: null, error: null }, slope: { status: "loading", data: null, error: null } });
       const [s, sl] = await Promise.allSettled([
-        sampleElevation(point.lon, point.lat, ctrl.signal),
-        getSlope(point.lon, point.lat, ctrl.signal),
+        sampleElevation(point.lon, point.lat, ctrl.signal, planet),
+        getSlope(point.lon, point.lat, ctrl.signal, planet),
       ]);
       if (ctrl.signal.aborted) return;
       setPointInfo({
@@ -108,7 +109,7 @@ export function usePointQuery(): void {
       });
     })();
     return () => ctrl.abort();
-  }, [point, setPointInfo]);
+  }, [point, planet, setPointInfo]);
 }
 
 /** Browser network state. This says nothing about offline map availability. */

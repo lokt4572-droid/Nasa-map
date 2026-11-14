@@ -12,6 +12,7 @@
  * Source documentation: https://trek.nasa.gov/tiles/apidoc/trekAPI.html?body=mars
  */
 import { TREK_DECLARED_CRS } from "./marsProjection";
+import type { PlanetId } from "./planetRegistry";
 
 export const TREK_WMTS_BASE: string =
   (import.meta.env.VITE_TREK_WMTS_BASE ?? "").replace(/\/+$/, "") || "https://trek.nasa.gov/tiles/Mars/EQ";
@@ -21,6 +22,7 @@ export type BBox = { west: number; south: number; east: number; north: number };
 
 export interface MarsMapLayer {
   id: string;
+  planet: PlanetId;
   name: string;
   description: string;
   source: "NASA_TREK";
@@ -56,6 +58,7 @@ export interface MarsMapLayer {
 const capsUrl = (layerId: string) => `${TREK_WMTS_BASE}/${layerId}/1.0.0/WMTSCapabilities.xml`;
 
 const common = {
+  planet: "MARS" as PlanetId,
   source: "NASA_TREK" as const,
   numericElevation: false as const,
   crs: TREK_DECLARED_CRS,
@@ -157,11 +160,113 @@ export const MARS_LAYERS: MarsMapLayer[] = [
 export const JEZERO_REGION_LAYER_ID = "jezero-ctx-ortho";
 
 export function getLayerConfig(id: string): MarsMapLayer {
-  const l = MARS_LAYERS.find((x) => x.id === id);
+  const l = ALL_LAYERS.find((x) => x.id === id);
   if (!l) throw new Error(`Unknown map layer ${id}`);
   return l;
 }
 
 export function bboxContains(b: BBox, lon: number, lat: number): boolean {
   return lon >= b.west && lon <= b.east && lat >= b.south && lat <= b.north;
+}
+
+// ---------------------------------------------------------------------------
+// Moon and Mercury (v0.2). Verified against live GetCapabilities on 2026-11-14.
+const TREK_TILES = TREK_WMTS_BASE.replace(/\/Mars\/EQ$/, "");
+const trekCaps = (body: string, layerId: string) => `${TREK_TILES}/${body}/EQ/${layerId}/1.0.0/WMTSCapabilities.xml`;
+const GLOBAL_BBOX: BBox = { west: -180, south: -90, east: 180, north: 90 };
+
+const moonCommon = { ...common, planet: "MOON" as PlanetId, crs: "urn:ogc:def:crs:EPSG::104903", verifiedAt: "2026-11-14" };
+const mercuryCommon = { ...common, planet: "MERCURY" as PlanetId, crs: "urn:ogc:def:crs:IAU2000::19900", verifiedAt: "2026-11-14" };
+
+export const MOON_LAYERS: MarsMapLayer[] = [
+  {
+    ...moonCommon,
+    id: "moon-lroc-wac-mosaic",
+    name: "LROC WAC Global Mosaic v2",
+    layerId: "LRO_WAC_Mosaic_Global_303ppd_v02",
+    capabilitiesUrl: trekCaps("Moon", "LRO_WAC_Mosaic_Global_303ppd_v02"),
+    description: "LRO Wide Angle Camera global image mosaic (303 px/deg, ≈100 m/px at the equator). Image data, not elevation.",
+    resolution: "303 px/deg (≈100 m/px)",
+    category: "imagery",
+    visible: true,
+    opacity: 1,
+    defaultEnabled: true,
+    mission: "Lunar Reconnaissance Orbiter",
+    instrument: "LROC WAC",
+    dataKind: "ORTHOIMAGE",
+    coverage: "global",
+    bbox: GLOBAL_BBOX,
+    format: "image/jpeg",
+    tileMatrixLevelsVerified: 9,
+  },
+  {
+    ...moonCommon,
+    id: "moon-lola-clrshade",
+    name: "LOLA Color Hillshade v4",
+    layerId: "LRO_LOLA_ClrShade_Global_128ppd_v04",
+    capabilitiesUrl: trekCaps("Moon", "LRO_LOLA_ClrShade_Global_128ppd_v04"),
+    description: "LRO LOLA laser-altimetry DEM shown as colour hillshade (128 px/deg ≈ 237 m/px). Colours are a visualization, not elevation values.",
+    resolution: "128 px/deg (≈237 m/px)",
+    category: "topography",
+    visible: false,
+    opacity: 1,
+    defaultEnabled: false,
+    mission: "Lunar Reconnaissance Orbiter",
+    instrument: "LOLA",
+    dataKind: "COLOR_HILLSHADE",
+    coverage: "global",
+    bbox: GLOBAL_BBOX,
+    format: "image/png",
+    tileMatrixLevelsVerified: 6,
+  },
+];
+
+export const MERCURY_LAYERS: MarsMapLayer[] = [
+  {
+    ...mercuryCommon,
+    id: "mercury-mdis-mosaic",
+    name: "MESSENGER MDIS Global Mosaic (2013)",
+    layerId: "Mercury_MESSENGER_mosaic_global_250m_2013",
+    capabilitiesUrl: trekCaps("Mercury", "Mercury_MESSENGER_mosaic_global_250m_2013"),
+    description: "MESSENGER MDIS global image mosaic, 250 m/px. Image data, not elevation.",
+    resolution: "250 m/px",
+    category: "imagery",
+    visible: true,
+    opacity: 1,
+    defaultEnabled: true,
+    mission: "MESSENGER",
+    instrument: "MDIS",
+    dataKind: "ORTHOIMAGE",
+    coverage: "global",
+    bbox: { west: -180, south: -89.9999824, east: 179.9999648, north: 90 },
+    format: "image/png",
+    tileMatrixLevelsVerified: 8,
+  },
+  {
+    ...mercuryCommon,
+    id: "mercury-usgs-dem-clrshade",
+    name: "USGS MESSENGER DEM 665 m — Color Hillshade",
+    layerId: "Mercury_Messenger_USGS_DEM_665m_v2_HillshadeColor",
+    capabilitiesUrl: trekCaps("Mercury", "Mercury_Messenger_USGS_DEM_665m_v2_HillshadeColor"),
+    description: "Colour hillshade of the USGS global MESSENGER DEM (≈665 m/px). Low-detail topography; colours are not elevation values.",
+    resolution: "665 m/px (low detail)",
+    category: "topography",
+    visible: false,
+    opacity: 1,
+    defaultEnabled: false,
+    mission: "MESSENGER",
+    instrument: "MDIS stereo (USGS DEM)",
+    dataKind: "COLOR_HILLSHADE",
+    coverage: "global",
+    bbox: GLOBAL_BBOX,
+    format: "image/png",
+    tileMatrixLevelsVerified: 6,
+  },
+];
+
+/** Every Trek layer of every body. Layer ids are unique across bodies. */
+export const ALL_LAYERS: MarsMapLayer[] = [...MARS_LAYERS, ...MOON_LAYERS, ...MERCURY_LAYERS];
+
+export function layersForPlanet(planet: PlanetId): MarsMapLayer[] {
+  return ALL_LAYERS.filter((l) => l.planet === planet);
 }

@@ -17,13 +17,26 @@ const SECTIONS: { id: SidebarSection; label: string }[] = [
   { id: "data", label: "Data Manager" },
 ];
 
+// Mission tools are Mars-only. Venus has no map service (no layer list).
+const BY_PLANET: Record<string, SidebarSection[]> = {
+  MARS: ["layers", "terrain", "science", "missions", "routes", "hazards", "data"],
+  MOON: ["layers", "terrain", "science", "data"],
+  MERCURY: ["layers", "terrain", "science", "data"],
+  VENUS: ["data"],
+  EARTH: ["data"],
+};
+
 export default function Sidebar() {
-  const section = useAppStore((s) => s.section);
+  const planet = useAppStore((s) => s.planet);
+  const chosen = useAppStore((s) => s.section);
+  const allowed = BY_PLANET[planet] ?? ["data"];
+  // Fall back to the first section that exists for this body.
+  const section: SidebarSection = allowed.includes(chosen) ? chosen : allowed[0]!;
   const setSection = useAppStore((s) => s.setSection);
   return (
     <aside className="sidebar">
       <nav className="sidebar__nav" aria-label="Sections">
-        {SECTIONS.map((s, i) => (
+        {SECTIONS.filter((s) => BY_PLANET[planet]?.includes(s.id)).map((s, i) => (
           <button
             key={s.id}
             className={`nav-btn ${section === s.id ? "nav-btn--active" : ""}`}

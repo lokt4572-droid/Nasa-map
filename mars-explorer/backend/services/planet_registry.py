@@ -178,3 +178,54 @@ def crs_matches_planet(crs, planet_id: str) -> bool:
         return False
     lo, hi = get_planet(planet_id).semi_major_range_m
     return lo <= crs.ellipsoid.semi_major_metre <= hi
+
+
+# ---------------------------------------------------------------------------
+# Map layer catalog per body. Every Trek entry was verified against its live
+# GetCapabilities on 2026-11-14 (identifier, SupportedCRS, format, bbox, levels).
+# Tile grids are NOT stored here: clients must read them from GetCapabilities.
+
+TREK = "https://trek.nasa.gov/tiles"
+
+
+def _trek(body: str, layer_id: str, **kw) -> dict:
+    return {
+        "source": "NASA_TREK",
+        "layer_id": layer_id,
+        "capabilities_url": f"{TREK}/{body}/EQ/{layer_id}/1.0.0/WMTSCapabilities.xml",
+        "pixels_are_elevation": False,
+        "verified_at": "2026-11-14",
+        **kw,
+    }
+
+
+PLANET_LAYERS: dict[str, list[dict]] = {
+    "MARS": [
+        _trek("Mars", "Mars_MGS_MOLA_ClrShade_merge_global_463m", id="mola-global-clrshade", name="MOLA Global Color Hillshade",
+              kind="COLOR_HILLSHADE", resolution="463 m/px", coverage="global", crs="urn:ogc:def:crs:EPSG::104905", format="image/jpeg", levels=8),
+        _trek("Mars", "Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw", id="mola-hrsc-blend-clrshade", name="MOLA + HRSC Color Hillshade Blend",
+              kind="COLOR_HILLSHADE", resolution="200 m/px", coverage="global", crs="urn:ogc:def:crs:EPSG::104905", format="image/jpeg", levels=9),
+        _trek("Mars", "JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0", id="jezero-ctx-ortho", name="CTX Jezero Orthomosaic",
+              kind="ORTHOIMAGE", resolution="6 m/px", coverage="regional", crs="urn:ogc:def:crs:EPSG::104905", format="image/png", levels=14),
+        _trek("Mars", "JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd", id="jezero-hirise-ortho", name="HiRISE Jezero Controlled Orthomosaic",
+              kind="ORTHOIMAGE", resolution="25 cm/px", coverage="regional", crs="urn:ogc:def:crs:EPSG::104905", format="image/png", levels=18),
+    ],
+    "MOON": [
+        _trek("Moon", "LRO_WAC_Mosaic_Global_303ppd_v02", id="moon-lroc-wac-mosaic", name="LROC WAC Global Mosaic v2",
+              kind="ORTHOIMAGE", resolution="303 px/deg (≈100 m/px at the equator)", coverage="global", crs="urn:ogc:def:crs:EPSG::104903", format="image/jpeg", levels=9),
+        _trek("Moon", "LRO_LOLA_ClrShade_Global_128ppd_v04", id="moon-lola-clrshade", name="LOLA Color Hillshade v4",
+              kind="COLOR_HILLSHADE", resolution="128 px/deg (≈237 m/px at the equator)", coverage="global", crs="urn:ogc:def:crs:EPSG::104903", format="image/png", levels=6),
+    ],
+    "MERCURY": [
+        _trek("Mercury", "Mercury_MESSENGER_mosaic_global_250m_2013", id="mercury-mdis-mosaic", name="MESSENGER MDIS Global Mosaic (2013)",
+              kind="ORTHOIMAGE", resolution="250 m/px", coverage="global", crs="urn:ogc:def:crs:IAU2000::19900", format="image/png", levels=8),
+        _trek("Mercury", "Mercury_Messenger_USGS_DEM_665m_v2_HillshadeColor", id="mercury-usgs-dem-clrshade", name="USGS MESSENGER DEM 665 m — Color Hillshade",
+              kind="COLOR_HILLSHADE", resolution="665 m/px (low detail)", coverage="global", crs="urn:ogc:def:crs:IAU2000::19900", format="image/png", levels=6),
+    ],
+    "VENUS": [],  # NASA Trek has no Venus body (checked 2026-11-14); see the GTDR catalog entry.
+    "EARTH": [],  # Earth layers come from NASA GIBS discovery + OpenStreetMap (Earth mode).
+}
+
+
+def layers_for(planet_id: str) -> list[dict]:
+    return PLANET_LAYERS[get_planet(planet_id).id]

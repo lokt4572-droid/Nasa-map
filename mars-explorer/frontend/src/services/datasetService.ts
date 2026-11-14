@@ -1,5 +1,6 @@
 /** Typed wrappers around backend endpoints. */
 import { TREK_DECLARED_CRS } from "../config/marsProjection";
+import { PLANETS, type PlanetId } from "../config/planetRegistry";
 import type {
   CoverageResponse,
   Dataset,
@@ -29,13 +30,19 @@ export const registerDataset = (body: {
 }) => apiRequest<{ dataset: Dataset; warnings: string[] }>("/datasets/register/", { method: "POST", body, timeoutMs: 600_000 });
 
 // --- terrain (point given in the map's declared CRS; latitude type not asserted)
-const pointQuery = (lon: number, lat: number) => ({ lon, lat, crs: TREK_DECLARED_CRS });
-export const getCoverage = (lon: number, lat: number, signal?: AbortSignal) =>
-  apiRequest<CoverageResponse>("/terrain/coverage/", { query: pointQuery(lon, lat), signal });
-export const sampleElevation = (lon: number, lat: number, signal?: AbortSignal) =>
-  apiRequest<SampleResponse>("/terrain/sample/", { query: pointQuery(lon, lat), signal });
-export const getSlope = (lon: number, lat: number, signal?: AbortSignal) =>
-  apiRequest<SlopeResponse>("/terrain/slope/", { query: pointQuery(lon, lat), signal });
+// Points are sent in the CRS of the body's map (as declared by its map service).
+const pointQuery = (lon: number, lat: number, planet: PlanetId) => ({
+  lon,
+  lat,
+  planet,
+  crs: PLANETS[planet].mapCrs ?? (planet === "EARTH" ? "EPSG:4326" : TREK_DECLARED_CRS),
+});
+export const getCoverage = (lon: number, lat: number, signal?: AbortSignal, planet: PlanetId = "MARS") =>
+  apiRequest<CoverageResponse>("/terrain/coverage/", { query: pointQuery(lon, lat, planet), signal });
+export const sampleElevation = (lon: number, lat: number, signal?: AbortSignal, planet: PlanetId = "MARS") =>
+  apiRequest<SampleResponse>("/terrain/sample/", { query: pointQuery(lon, lat, planet), signal });
+export const getSlope = (lon: number, lat: number, signal?: AbortSignal, planet: PlanetId = "MARS") =>
+  apiRequest<SlopeResponse>("/terrain/slope/", { query: pointQuery(lon, lat, planet), signal });
 
 // --- missions
 export const listMissions = () => apiRequest<Paginated<Mission>>("/missions/");

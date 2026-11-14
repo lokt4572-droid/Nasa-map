@@ -1,12 +1,14 @@
 import { type FormEvent, useState } from "react";
 
-import { MARS_LAYERS } from "../../config/mapLayers";
+import { layersForPlanet } from "../../config/mapLayers";
 import { useRefreshers } from "../../hooks/useBackendData";
 import { describeError, fieldErrors } from "../../services/api";
 import { registerDataset } from "../../services/datasetService";
 import { useAppStore } from "../../store/useAppStore";
 
 export default function DataManager() {
+  const planet = useAppStore((s) => s.planet);
+  const planetLayers = layersForPlanet(planet);
   const layers = useAppStore((s) => s.layers);
   const datasets = useAppStore((s) => s.datasets);
   const health = useAppStore((s) => s.backend.health);
@@ -44,7 +46,7 @@ export default function DataManager() {
           </tr>
         </thead>
         <tbody>
-          {MARS_LAYERS.map((l) => (
+          {planetLayers.map((l) => (
             <tr key={l.id}>
               <td>{l.name}</td>
               <td className="mono">{l.resolution}</td>

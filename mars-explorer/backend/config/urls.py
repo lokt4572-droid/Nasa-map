@@ -3,6 +3,7 @@ from django.urls import include, path
 
 api_v1 = [
     path("", include("apps.core.urls")),
+    path("", include("apps.planets.urls")),
     path("", include("apps.datasets.urls")),
     path("", include("apps.missions.urls")),
     path("", include("apps.hazards.urls")),

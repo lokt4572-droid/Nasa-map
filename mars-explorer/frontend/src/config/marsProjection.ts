@@ -74,16 +74,16 @@ export function lonTo360(lon: number): number {
   return ((lon % 360) + 360) % 360;
 }
 
-/** Radius of curvature in the prime vertical, N(φ), Mars 2000 ellipsoid. */
-export function primeVerticalRadius(latDeg: number): number {
+/** Radius of curvature in the prime vertical, N(φ). Defaults: Mars 2000 ellipsoid. */
+export function primeVerticalRadius(latDeg: number, a = MARS_EQUATORIAL_RADIUS_M, e2 = MARS_E2): number {
   const s = Math.sin((latDeg * Math.PI) / 180);
-  return MARS_EQUATORIAL_RADIUS_M / Math.sqrt(1 - MARS_E2 * s * s);
+  return a / Math.sqrt(1 - e2 * s * s);
 }
 
-/** Radius of curvature in the meridian, M(φ), Mars 2000 ellipsoid. */
-export function meridionalRadius(latDeg: number): number {
+/** Radius of curvature in the meridian, M(φ). Defaults: Mars 2000 ellipsoid. */
+export function meridionalRadius(latDeg: number, a = MARS_EQUATORIAL_RADIUS_M, e2 = MARS_E2): number {
   const s = Math.sin((latDeg * Math.PI) / 180);
-  return (MARS_EQUATORIAL_RADIUS_M * (1 - MARS_E2)) / Math.pow(1 - MARS_E2 * s * s, 1.5);
+  return (a * (1 - e2)) / Math.pow(1 - e2 * s * s, 1.5);
 }
 
 /**
@@ -91,12 +91,17 @@ export function meridionalRadius(latDeg: number): number {
  * East-west size shrinks with cos(latitude). OpenLayers' own ScaleLine assumes an Earth
  * sphere for degree-based projections, so we do not use it.
  */
-export function groundResolutionM(resolutionDegPerPx: number, latDeg: number): { ew: number; ns: number } {
+export function groundResolutionM(
+  resolutionDegPerPx: number,
+  latDeg: number,
+  a = MARS_EQUATORIAL_RADIUS_M,
+  e2 = MARS_E2,
+): { ew: number; ns: number } {
   const rad = (resolutionDegPerPx * Math.PI) / 180;
   const lat = Math.max(-89.999, Math.min(89.999, latDeg));
   return {
-    ew: rad * primeVerticalRadius(lat) * Math.cos((lat * Math.PI) / 180),
-    ns: rad * meridionalRadius(lat),
+    ew: rad * primeVerticalRadius(lat, a, e2) * Math.cos((lat * Math.PI) / 180),
+    ns: rad * meridionalRadius(lat, a, e2),
   };
 }
 

@@ -22,8 +22,10 @@ import WMTS, { optionsFromCapabilities } from "ol/source/WMTS";
 import VectorSource from "ol/source/Vector";
 import type WMTSTileGrid from "ol/tilegrid/WMTS";
 
-import { type BBox, MARS_LAYERS, type MarsMapLayer } from "../config/mapLayers";
-import { MARS_GEOGRAPHIC_EXTENT, TREK_DECLARED_CRS, registerMarsProjections } from "../config/marsProjection";
+import { ALL_LAYERS, type BBox, type MarsMapLayer } from "../config/mapLayers";
+import { MARS_GEOGRAPHIC_EXTENT } from "../config/marsProjection";
+import { mapProjectionFor, registerPlanetProjections } from "../config/planetProjections";
+import type { PlanetId } from "../config/planetRegistry";
 
 export type WmtsErrorCode =
   | "CAPABILITIES_NETWORK"
@@ -147,7 +149,7 @@ export function parseCapabilities(xml: string, layerId: string): unknown {
 }
 
 export function buildWmtsSource(caps: unknown, layer: MarsMapLayer): WMTS {
-  registerMarsProjections();
+  registerPlanetProjections();
   // optionsFromCapabilities is typed with a loose object signature.
   const options = optionsFromCapabilities(caps as Parameters<typeof optionsFromCapabilities>[0], {
     layer: layer.layerId,
@@ -160,10 +162,11 @@ export function buildWmtsSource(caps: unknown, layer: MarsMapLayer): WMTS {
     );
   }
   const projCode = typeof options.projection === "string" ? options.projection : options.projection?.getCode();
-  if (projCode !== TREK_DECLARED_CRS) {
+  // Each layer must be in its own body's declared CRS (Mars, Moon and Mercury differ).
+  if (projCode !== layer.crs) {
     throw new WmtsLayerError(
       "UNSUPPORTED_CRS",
-      `Layer CRS ${String(projCode)} differs from the registered Mars CRS ${TREK_DECLARED_CRS}; refusing to overlay without a transformation`,
+      `Layer CRS ${String(projCode)} differs from the expected ${layer.planet} CRS ${layer.crs}; refusing to overlay without a transformation`,
       layer.layerId,
     );
   }
@@ -199,7 +202,7 @@ export async function loadWmtsLayer(
     source,
     visible: layer.visible,
     opacity: layer.opacity,
-    zIndex: MARS_LAYERS.findIndex((l) => l.id === layer.id),
+    zIndex: ALL_LAYERS.findIndex((l) => l.id === layer.id),
     extent: info.extent ?? undefined,
     properties: { marsLayerId: layer.id },
   });
@@ -225,8 +228,8 @@ export interface MarsMapHandle {
 
 export const GLOBAL_VIEW = { center: [0, 0] as [number, number], resolution: 0.3515625 };
 
-export function createMarsMap(target: HTMLElement | undefined): MarsMapHandle {
-  const projection = registerMarsProjections();
+export function createMarsMap(target: HTMLElement | undefined, planet: PlanetId = "MARS"): MarsMapHandle {
+  const projection = mapProjectionFor(planet);
   const view = new View({
     projection,
     center: GLOBAL_VIEW.center,

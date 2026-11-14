@@ -10,7 +10,8 @@ Pipeline
 4. Per-cell slope (central differences) and roughness (TRI); hazards (not REJECTED) block
    a disc of (radius + profile buffer).
 5. A* over an 8-connected grid with the profile cost (see profiles.py); admissible
-   heuristic = straight-line distance with the smallest cell sizes.
+   heuristic = straight-line distance with the smallest cell sizes. Diagonal steps may not
+   cut the corner between two cells when either orthogonal neighbour is impassable.
 6. Results: geometry, distance (horizontal & 3-D), elevation profile, ascent/descent,
    max grade, share of distance over cells without DEM data.
 
@@ -40,6 +41,10 @@ STATUS_FOUND = "ROUTE_FOUND"
 STATUS_INSUFFICIENT = "INSUFFICIENT_TERRAIN_DATA"
 STATUS_NO_PASSABLE = "NO_PASSABLE_ROUTE"
 
+CLASS_KNOWN = "KNOWN_TERRAIN_ROUTE"
+CLASS_PARTIAL = "PARTIALLY_UNVERIFIED_ROUTE"
+CLASS_NONE = "NO_VALID_ROUTE"
+
 NEIGHBOURS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
 
@@ -66,6 +71,7 @@ class TerrainGrid:
     decimation: float
     to_query: Any            # Transformer dataset CRS -> query CRS
     meta: dict = field(default_factory=dict)
+    proximity: np.ndarray | None = None  # (H, W) 0..1 hazard proximity outside the blocked discs
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -98,9 +104,10 @@ def build_grid(ds, points_ds: list[tuple[float, float]], to_query, max_side: int
         if t.b != 0 or t.d != 0:
             raise RoutePlanningError(STATUS_INSUFFICIENT, "Rotated DEM grids are not supported")
         rc = []
+        period = dem_reader.x_wrap_period(ds_crs, src.bounds.left, src.bounds.right)
         for x, y in points_ds:
-            if ds_crs.is_geographic:
-                x = (x - src.bounds.left) % 360.0 + src.bounds.left
+            if period:
+                x = (x - src.bounds.left) % period + src.bounds.left
             col = math.floor((x - t.c) / t.a)
             row = math.floor((y - t.f) / t.e)
             if not (0 <= row < src.height and 0 <= col < src.width):
@@ -158,25 +165,152 @@ def build_grid(ds, points_ds: list[tuple[float, float]], to_query, max_side: int
 
 
 def block_hazards(grid: TerrainGrid, hazards_ds: list[tuple[float, float, float]]) -> int:
-    """Block discs of radius r (metres) around hazards given in DATASET CRS (x, y, r)."""
+    """Block discs of radius r (metres) around hazards given in DATASET CRS (x, y, r).
+
+    Cells between r and 2r get a hazard proximity 0..1 (1 at the disc edge), used by the
+    hazard-proximity cost term. Returns the number of blocked cells."""
     h, w = grid.shape
+    if grid.proximity is None:
+        grid.proximity = np.zeros(grid.shape)
     n = 0
     for x, y, radius in hazards_ds:
         cell = grid.cell_of(x, y)
         if cell is None:
             continue
         i, j = cell
-        ri = int(math.ceil(radius / max(grid.dy_m.mean(), 1e-6)))
-        rj = int(math.ceil(radius / max(grid.dx_m[i], 1e-6)))
+        r = max(radius, 0.0)
+        outer = 2 * r
+        ri = int(math.ceil(outer / max(grid.dy_m.mean(), 1e-6)))
+        rj = int(math.ceil(outer / max(grid.dx_m[i], 1e-6)))
         for ii in range(max(0, i - ri), min(h, i + ri + 1)):
             for jj in range(max(0, j - rj), min(w, j + rj + 1)):
                 dyy = (ii - i) * grid.dy_m.mean()
                 dxx = (jj - j) * grid.dx_m[ii]
-                if math.hypot(dxx, dyy) <= max(radius, 0.0) or (ii == i and jj == j):
+                d = math.hypot(dxx, dyy)
+                if d <= r or (ii == i and jj == j):
                     if not grid.blocked[ii, jj]:
                         n += 1
                     grid.blocked[ii, jj] = True
+                elif r > 0 and d <= outer:
+                    grid.proximity[ii, jj] = max(grid.proximity[ii, jj], 1.0 - (d - r) / r)
     return n
+
+
+def cell_passable(grid: TerrainGrid, i: int, j: int, profile: MovementProfile, allow_unknown: bool) -> bool:
+    """A cell may be entered: inside the grid, not in a hazard disc, has a DEM value (unless the
+    policy allows unknown terrain) and its slope does not exceed the profile limit."""
+    h, w = grid.shape
+    if not (0 <= i < h and 0 <= j < w) or grid.blocked[i, j]:
+        return False
+    if math.isnan(grid.z[i, j]):
+        return allow_unknown
+    sl = grid.slope_deg[i, j]
+    return math.isnan(sl) or sl <= profile.max_slope_deg
+
+
+def step_cost(grid: TerrainGrid, i: int, j: int, ni: int, nj: int, profile: MovementProfile,
+              allow_unknown: bool, unknown_mult: float) -> float | None:
+    """Cost of moving from (i, j) to the neighbour (ni, nj), or None if the step is forbidden."""
+    if not cell_passable(grid, ni, nj, profile, allow_unknown):
+        return None
+    di, dj = ni - i, nj - j
+    if di and dj:
+        # No corner cutting: both cells the diagonal passes between must be passable.
+        if not (cell_passable(grid, i + di, j, profile, allow_unknown) and cell_passable(grid, i, j + dj, profile, allow_unknown)):
+            return None
+    z_a, z_b = grid.z[i, j], grid.z[ni, nj]
+    unknown = math.isnan(z_a) or math.isnan(z_b)
+    if unknown and not allow_unknown:
+        return None
+    d = grid.step_length(i, j, ni, nj)
+    if unknown:
+        dz, grade, rough, mult = 0.0, 0.0, 0.0, unknown_mult
+    else:
+        dz = z_b - z_a
+        grade = math.degrees(math.atan2(abs(dz), d))
+        if grade > profile.max_slope_deg:
+            return None
+        t = grid.tri_m[ni, nj]
+        rough = 0.0 if math.isnan(t) else min(t / profile.roughness_ref_m, 1.0)
+        mult = 1.0
+    prox = float(grid.proximity[ni, nj]) if grid.proximity is not None else 0.0
+    return math.hypot(d, dz) * (
+        1.0
+        + profile.slope_weight * (grade / profile.max_slope_deg) ** 2
+        + profile.roughness_weight * rough
+        + profile.hazard_proximity_weight * prox
+    ) * mult
+
+
+def path_cost(grid: TerrainGrid, cells: list[tuple[int, int]], profile: MovementProfile) -> float:
+    """Total profile cost of a cell path (same function A* minimises)."""
+    allow = profile.allow_unknown_terrain
+    mult = profile.unknown_multiplier if math.isfinite(profile.unknown_multiplier) else 1.0
+    total = 0.0
+    for (i, j), (ni, nj) in zip(cells[:-1], cells[1:]):
+        c = step_cost(grid, i, j, ni, nj, profile, allow, mult)
+        if c is None:
+            return float("inf")
+        total += c
+    return total
+
+
+def supercover_cells(i0: int, j0: int, i1: int, j1: int) -> list[tuple[int, int]]:
+    """Every grid cell a straight segment between two cell centres touches (incl. both cells at
+    an exact corner crossing), so a simplified segment can be checked cell by cell."""
+    cells = [(i0, j0)]
+    di, dj = i1 - i0, j1 - j0
+    ni, nj = abs(di), abs(dj)
+    si, sj = (1 if di > 0 else -1), (1 if dj > 0 else -1)
+    i, j = i0, j0
+    a = b = 0
+    while a < ni or b < nj:
+        # compare (0.5 + a) / ni with (0.5 + b) / nj without division
+        lhs, rhs = (1 + 2 * a) * nj, (1 + 2 * b) * ni
+        if lhs == rhs:  # passes exactly through a corner: touches both side cells
+            cells.append((i + si, j))
+            cells.append((i, j + sj))
+            i, j, a, b = i + si, j + sj, a + 1, b + 1
+        elif lhs < rhs:
+            i, a = i + si, a + 1
+        else:
+            j, b = j + sj, b + 1
+        cells.append((i, j))
+    return cells
+
+
+def segment_clear(grid: TerrainGrid, a: tuple[int, int], b: tuple[int, int], profile: MovementProfile) -> bool:
+    """True when the straight segment a-b touches only passable cells with known terrain (a
+    simplified line must never cross obstacles or NoData) and no step on it exceeds the slope limit."""
+    cells = supercover_cells(*a, *b)
+    prev = None
+    for c in cells:
+        if not cell_passable(grid, *c, profile, allow_unknown=False):
+            return False
+        if prev is not None and prev != c and abs(prev[0] - c[0]) + abs(prev[1] - c[1]) == 1:
+            d = grid.step_length(*prev, *c)
+            if math.degrees(math.atan2(abs(grid.z[c] - grid.z[prev]), d)) > profile.max_slope_deg:
+                return False
+        prev = c
+    return True
+
+
+def simplify_path(grid: TerrainGrid, cells: list[tuple[int, int]], profile: MovementProfile) -> list[tuple[int, int]]:
+    """Greedy line-of-sight simplification. Segments through unknown terrain are kept cell by
+    cell (never straightened across NoData)."""
+    if len(cells) <= 2:
+        return list(cells)
+    out = [cells[0]]
+    k = 0
+    while k < len(cells) - 1:
+        far = k + 1
+        for m in range(len(cells) - 1, k + 1, -1):
+            if segment_clear(grid, cells[k], cells[m], profile):
+                far = m
+                break
+        out.append(cells[far])
+        k = far
+    return out
 
 
 def astar(grid: TerrainGrid, start: tuple[int, int], goal: tuple[int, int], profile: MovementProfile,
@@ -184,7 +318,6 @@ def astar(grid: TerrainGrid, start: tuple[int, int], goal: tuple[int, int], prof
     allow_unknown = profile.allow_unknown_terrain if allow_unknown is None else allow_unknown
     unknown_mult = profile.unknown_multiplier if math.isfinite(profile.unknown_multiplier) else 1.0
     h, w = grid.shape
-    z, slope, tri, blocked = grid.z, grid.slope_deg, grid.tri_m, grid.blocked
     dxmin, dymin = float(grid.dx_m.min()), float(grid.dy_m.min())
     gi, gj = goal
 
@@ -206,31 +339,16 @@ def astar(grid: TerrainGrid, start: tuple[int, int], goal: tuple[int, int], prof
             break
         closed[cur] = True
         i, j = divmod(cur, w)
-        z_a = z[i, j]
         for di, dj in NEIGHBOURS:
             ni, nj = i + di, j + dj
             if not (0 <= ni < h and 0 <= nj < w):
                 continue
             nxt = ni * w + nj
-            if closed[nxt] or blocked[ni, nj]:
+            if closed[nxt]:
                 continue
-            z_b = z[ni, nj]
-            unknown = math.isnan(z_a) or math.isnan(z_b)
-            if unknown and not allow_unknown:
+            step = step_cost(grid, i, j, ni, nj, profile, allow_unknown, unknown_mult)
+            if step is None:
                 continue
-            d = grid.step_length(i, j, ni, nj)
-            if unknown:
-                dz, grade, rough, mult = 0.0, 0.0, 0.0, unknown_mult
-            else:
-                dz = z_b - z_a
-                grade = math.degrees(math.atan2(abs(dz), d))
-                sl = slope[ni, nj]
-                if grade > profile.max_slope_deg or (not math.isnan(sl) and sl > profile.max_slope_deg):
-                    continue
-                t = tri[ni, nj]
-                rough = 0.0 if math.isnan(t) else min(t / profile.roughness_ref_m, 1.0)
-                mult = 1.0
-            step = math.hypot(d, dz) * (1.0 + profile.slope_weight * (grade / profile.max_slope_deg) ** 2 + profile.roughness_weight * rough) * mult
             if extra_cost is not None:
                 step *= float(extra_cost[ni, nj])
             ng = gc + step
@@ -255,6 +373,8 @@ def summarize(grid: TerrainGrid, cells: list[tuple[int, int]], ds_lat_conv: str,
     profile_pts = []
     dist = dist3 = ascent = descent = unknown_dist = 0.0
     max_grade = 0.0
+    max_cell_slope = 0.0
+    unverified: list[list[float]] = []  # [from_m, to_m] along the route
     prev = None
     for i, j in cells:
         x, y = grid.xy_of(i, j)
@@ -269,6 +389,10 @@ def summarize(grid: TerrainGrid, cells: list[tuple[int, int]], ds_lat_conv: str,
             if math.isnan(zc) or math.isnan(zp):
                 unknown_dist += d
                 dist3 += d
+                if unverified and abs(unverified[-1][1] - dist) < 1e-6:
+                    unverified[-1][1] = dist + d
+                else:
+                    unverified.append([dist, dist + d])
             else:
                 dz = zc - zp
                 dist3 += math.hypot(d, dz)
@@ -277,6 +401,9 @@ def summarize(grid: TerrainGrid, cells: list[tuple[int, int]], ds_lat_conv: str,
                 max_grade = max(max_grade, math.degrees(math.atan2(abs(dz), d)))
             dist += d
         profile_pts.append({"distance_m": round(dist, 2), "elevation_m": None if math.isnan(zc) else float(zc)})
+        sl = grid.slope_deg[i, j]
+        if not math.isnan(sl):
+            max_cell_slope = max(max_cell_slope, float(sl))
         prev = (i, j)
     if len(profile_pts) > 500:  # keep responses small
         idx = np.linspace(0, len(profile_pts) - 1, 500).round().astype(int)
@@ -291,8 +418,49 @@ def summarize(grid: TerrainGrid, cells: list[tuple[int, int]], ds_lat_conv: str,
         "max_step_grade_deg": max_grade,
         "unknown_terrain_distance_m": unknown_dist,
         "unknown_terrain_fraction": (unknown_dist / dist) if dist > 0 else 0.0,
+        "unverified_segments": [{"from_m": round(a, 2), "to_m": round(b, 2), "status": "UNVERIFIED_NO_DEM_DATA"} for a, b in unverified],
+        "max_cell_slope_deg": max_cell_slope,
+        "classification": CLASS_PARTIAL if unknown_dist > 0 else CLASS_KNOWN,
         "elevation_profile": profile_pts,
     }
+
+
+def describe_route(grid: TerrainGrid, cells: list[tuple[int, int]], profile: MovementProfile, ds_lat_conv: str,
+                   query_lat_conv: str, endpoints: tuple[list[float], list[float]] | None = None) -> dict:
+    """summarize() + cost under the profile + simplified geometry + metrics."""
+    r = summarize(grid, cells, ds_lat_conv, query_lat_conv)
+    cost = path_cost(grid, cells, profile)
+    r["cost"] = cost
+    # penalty above pure 3-D distance: slope + roughness + hazard proximity + uncertainty
+    r["terrain_cost"] = cost - r["distance_3d_m"]
+    simp = simplify_path(grid, cells, profile)
+    coords = []
+    for i, j in simp:
+        lon, lat = grid.to_query.transform(*grid.xy_of(i, j))
+        lat, _ = adapt_latitude(float(lat), ds_lat_conv, query_lat_conv)
+        coords.append([float(lon), float(lat)])
+    if endpoints:
+        r["geometry"]["coordinates"][0] = list(endpoints[0])
+        r["geometry"]["coordinates"][-1] = list(endpoints[1])
+        coords[0], coords[-1] = list(endpoints[0]), list(endpoints[1])
+    r["geometry_simplified"] = {"type": "LineString", "coordinates": coords}
+    r["simplification"] = (
+        "line-of-sight; every cell a simplified segment touches is passable with known DEM values; "
+        "metrics are computed on the full cell path"
+    )
+    r["metrics"] = {
+        "distance_m": r["distance_m"],
+        "distance_3d_m": r["distance_3d_m"],
+        "elevation_gain_m": r["total_ascent_m"],
+        "elevation_loss_m": r["total_descent_m"],
+        "max_step_grade_deg": r["max_step_grade_deg"],
+        "max_cell_slope_deg": r["max_cell_slope_deg"],
+        "known_terrain_pct": round(100 * (1 - r["unknown_terrain_fraction"]), 2),
+        "nodata_pct_along_route": round(100 * r["unknown_terrain_fraction"], 2),
+        "cost": cost,
+        "terrain_cost": r["terrain_cost"],
+    }
+    return r
 
 
 def _legs(grid, cells_pts, profile, extra_cost=None):
@@ -358,9 +526,8 @@ def _plan_in_window(ds, pts_ds, points_query, to_query, query_lat_conv, profile,
             raise RoutePlanningError(STATUS_INSUFFICIENT, "A route would have to cross cells without DEM data, which this profile forbids", {"grid": grid.meta, "retry_larger_window": True})
         raise RoutePlanningError(STATUS_NO_PASSABLE, "No route satisfies the profile limits (slope / hazards) inside the analysed window", {"grid": grid.meta, "retry_larger_window": True})
 
-    route = summarize(grid, primary, ds.latitude_convention, query_lat_conv)
-    route["geometry"]["coordinates"][0] = list(points_query[0])
-    route["geometry"]["coordinates"][-1] = list(points_query[-1])
+    ends = (list(points_query[0]), list(points_query[-1]))
+    route = describe_route(grid, primary, profile, ds.latitude_convention, query_lat_conv, ends)
     if route["unknown_terrain_fraction"] > profile.max_unknown_fraction:
         raise RoutePlanningError(
             STATUS_INSUFFICIENT,
@@ -369,10 +536,11 @@ def _plan_in_window(ds, pts_ds, points_query, to_query, query_lat_conv, profile,
         )
 
     grid.meta["window_scale"] = "whole DEM" if scale >= 1e6 else scale
-    out: dict[str, Any] = {"status": STATUS_FOUND, "route": route, "grid": grid.meta, "hazard_cells_blocked": blocked_cells}
+    out: dict[str, Any] = {"status": STATUS_FOUND, "route_classification": route["classification"], "route": route,
+                           "grid": grid.meta, "hazard_cells_blocked": blocked_cells}
     if include_return:
         back = _legs(grid, cells[::-1], profile)
-        out["return_route"] = summarize(grid, back, ds.latitude_convention, query_lat_conv) if back else None
+        out["return_route"] = describe_route(grid, back, profile, ds.latitude_convention, query_lat_conv, (ends[1], ends[0])) if back else None
     if include_alternative:
         extra = np.ones(grid.shape)
         for i, j in primary:
@@ -380,11 +548,33 @@ def _plan_in_window(ds, pts_ds, points_query, to_query, query_lat_conv, profile,
         alt = _legs(grid, cells, profile, extra_cost=extra)
         if alt:
             overlap = len(set(alt) & set(primary)) / max(len(alt), 1)
-            alt_sum = summarize(grid, alt, ds.latitude_convention, query_lat_conv)
+            alt_sum = describe_route(grid, alt, profile, ds.latitude_convention, query_lat_conv, ends)
             alt_sum["overlap_with_primary"] = overlap
             out["alternative_route"] = alt_sum if overlap < 0.9 else None
             if overlap >= 0.9:
                 out["alternative_note"] = "No sufficiently distinct alternative inside the analysed window"
         else:
             out["alternative_route"] = None
+    out["comparison"] = compare_routes(route, out.get("alternative_route"))
+    return out
+
+
+def _brief(r: dict, label: str) -> dict:
+    m = r["metrics"]
+    return {"label": label, "classification": r["classification"], "distance_m": m["distance_m"], "cost": m["cost"],
+            "terrain_cost": m["terrain_cost"], "elevation_gain_m": m["elevation_gain_m"],
+            "max_cell_slope_deg": m["max_cell_slope_deg"], "known_terrain_pct": m["known_terrain_pct"]}
+
+
+def compare_routes(a: dict, b: dict | None) -> dict:
+    """Route A = lowest cost under the profile; Route B = the most distinct alternative. Both
+    costs are evaluated with the same profile (no alternative-search penalty). No travel time."""
+    out = {"route_a": _brief(a, "Route A — lowest cost"), "route_b": _brief(b, "Route B — alternative") if b else None}
+    if b:
+        out["difference_b_minus_a"] = {
+            "distance_m": b["metrics"]["distance_m"] - a["metrics"]["distance_m"],
+            "terrain_cost": b["metrics"]["terrain_cost"] - a["metrics"]["terrain_cost"],
+            "cost": b["metrics"]["cost"] - a["metrics"]["cost"],
+        }
+    out["note"] = "Cost is a dimensionless weighted length (profile heuristic). No travel time is estimated."
     return out

@@ -5,17 +5,72 @@ import { ApiError, describeError } from "../../services/api";
 import { deleteRoute, getRouteProfiles, planRoute } from "../../services/datasetService";
 import { mapController } from "../../services/marsMapService";
 import { useAppStore } from "../../store/useAppStore";
-import type { RoutePlanResponse, RoutePoint, RouteProfile, RouteSummary } from "../../types/api";
+import type { RouteClassification, RouteComparison, RoutePlanResponse, RoutePoint, RouteProfile, RouteSummary, UnknownDataPolicy } from "../../types/api";
 import LineChart from "../common/LineChart";
 
 function pointLabel(p: RoutePoint | null): string {
   return p ? `${formatLat(p.lat_deg, 3)} ${formatLon(p.lon_east_deg, "180", 3)}` : "not set";
 }
 
+const CLASS_LABEL: Record<RouteClassification, string> = {
+  KNOWN_TERRAIN_ROUTE: "KNOWN TERRAIN ROUTE",
+  PARTIALLY_UNVERIFIED_ROUTE: "PARTIALLY UNVERIFIED ROUTE",
+  NO_VALID_ROUTE: "NO VALID ROUTE",
+};
+
+function ClassChip({ c }: { c?: RouteClassification }) {
+  if (!c) return null;
+  const cls = c === "KNOWN_TERRAIN_ROUTE" ? "ready" : c === "PARTIALLY_UNVERIFIED_ROUTE" ? "loading" : "error";
+  return <span className={`status-chip status-chip--${cls}`} data-testid="route-classification">{CLASS_LABEL[c]}</span>;
+}
+
+function Comparison({ c }: { c: RouteComparison }) {
+  const rows: [string, (b: RouteComparison["route_a"]) => string][] = [
+    ["Distance", (b) => formatDistance(b.distance_m)],
+    ["Terrain cost", (b) => b.terrain_cost.toFixed(0)],
+    ["Total cost", (b) => b.cost.toFixed(0)],
+    ["Elevation gain", (b) => `${b.elevation_gain_m.toFixed(0)} m`],
+    ["Max cell slope", (b) => `${b.max_cell_slope_deg.toFixed(1)}°`],
+    ["Known terrain", (b) => `${b.known_terrain_pct.toFixed(1)}%`],
+  ];
+  const d = c.difference_b_minus_a;
+  return (
+    <div className="card" data-testid="route-comparison">
+      <strong>Route comparison</strong>
+      <table className="cmp-table">
+        <thead>
+          <tr>
+            <th />
+            <th>A — lowest cost</th>
+            <th>B — alternative</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, f]) => (
+            <tr key={label}>
+              <td>{label}</td>
+              <td className="mono">{f(c.route_a)}</td>
+              <td className="mono">{c.route_b ? f(c.route_b) : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {d && (
+        <div className="hint small">
+          B vs A: {d.distance_m >= 0 ? "+" : "−"}
+          {formatDistance(Math.abs(d.distance_m))} distance, {d.terrain_cost >= 0 ? "+" : "−"}
+          {Math.abs(d.terrain_cost).toFixed(0)} terrain cost.
+        </div>
+      )}
+      <div className="hint small">{c.note} Terrain cost = penalty above the 3-D distance (slope, roughness, hazard proximity, unknown terrain).</div>
+    </div>
+  );
+}
+
 function Summary({ title, r }: { title: string; r: RouteSummary }) {
   return (
     <div className="card">
-      <strong>{title}</strong>
+      <strong>{title}</strong> <ClassChip c={r.classification} />
       <dl className="dl">
         <dt>Distance</dt>
         <dd className="mono">{formatDistance(r.distance_m)} (3-D {formatDistance(r.distance_3d_m)})</dd>
@@ -29,6 +84,20 @@ function Summary({ title, r }: { title: string; r: RouteSummary }) {
         <dd className={`mono ${r.unknown_terrain_fraction > 0 ? "warn-text" : ""}`}>
           {(r.unknown_terrain_fraction * 100).toFixed(1)}% ({formatDistance(r.unknown_terrain_distance_m)})
         </dd>
+        {r.max_cell_slope_deg !== undefined && (
+          <>
+            <dt>Max cell slope</dt>
+            <dd className="mono">{r.max_cell_slope_deg.toFixed(2)}°</dd>
+          </>
+        )}
+        {r.metrics && (
+          <>
+            <dt>Cost (terrain)</dt>
+            <dd className="mono">
+              {r.metrics.cost.toFixed(0)} ({r.metrics.terrain_cost.toFixed(0)})
+            </dd>
+          </>
+        )}
         {r.overlap_with_primary !== undefined && (
           <>
             <dt>Overlap w/ primary</dt>
@@ -36,6 +105,12 @@ function Summary({ title, r }: { title: string; r: RouteSummary }) {
           </>
         )}
       </dl>
+      {!!r.unverified_segments?.length && (
+        <div className="warn-text small" data-testid="unverified-segments">
+          UNVERIFIED (no DEM data):{" "}
+          {r.unverified_segments.map((s) => `${formatDistance(s.from_m)}–${formatDistance(s.to_m)}`).join(", ")} along the route
+        </div>
+      )}
     </div>
   );
 }
@@ -47,6 +122,11 @@ function DataQuality({ q }: { q: RoutePlanResponse["data_quality"] }) {
       {a.astronaut_scale_route_safety === "NOT_SUITABLE" && (
         <div className="map-error" style={{ position: "static", marginBottom: 6 }} role="alert">
           <strong>NOT SUITABLE FOR ASTRONAUT-SCALE ROUTE SAFETY.</strong> {a.reason}
+        </div>
+      )}
+      {q.planning_scope?.scope === "REGIONAL_PLANNING_ONLY" && (
+        <div className="warn-text small" style={{ marginBottom: 4 }}>
+          <strong>REGIONAL PLANNING ONLY.</strong> {q.planning_scope.reason}
         </div>
       )}
       <strong>Input data quality</strong>
@@ -88,6 +168,7 @@ export default function RoutePlanner() {
   const { setRouteDraft, setRouteResult } = useAppStore.getState();
   const [profiles, setProfiles] = useState<RouteProfile[]>([]);
   const [opts, setOpts] = useState({ ret: true, alt: true });
+  const [unknownPolicy, setUnknownPolicy] = useState<UnknownDataPolicy>("ALLOW_MARKED");
 
   useEffect(() => {
     if (!backendOnline) return;
@@ -108,6 +189,8 @@ export default function RoutePlanner() {
         profile: draft.profile,
         include_return: opts.ret,
         include_alternative: opts.alt,
+        // unknown terrain can only be crossed with STANDARD (marked UNVERIFIED)
+        ...(draft.profile === "STANDARD" ? { unknown_data_policy: unknownPolicy } : {}),
         ...(activeMissionId ? { mission: activeMissionId } : {}),
       });
       setRouteResult({ status: "ready", data, error: null });
@@ -178,6 +261,17 @@ export default function RoutePlanner() {
             {profile.allow_unknown_terrain ? `≤ ${profile.max_unknown_fraction * 100}% at ×${profile.unknown_multiplier} cost` : "forbidden"}.
           </div>
         )}
+        {draft.profile === "STANDARD" ? (
+          <label>
+            Terrain without DEM data
+            <select value={unknownPolicy} onChange={(e) => setUnknownPolicy(e.target.value as UnknownDataPolicy)}>
+              <option value="ALLOW_MARKED">Allow, marked UNVERIFIED</option>
+              <option value="REJECT">Reject</option>
+            </select>
+          </label>
+        ) : (
+          <div className="hint small">CONSERVATIVE never enters terrain without DEM data.</div>
+        )}
         <label className="check">
           <input type="checkbox" checked={opts.ret} onChange={(e) => setOpts({ ...opts, ret: e.target.checked })} /> Return path
         </label>
@@ -191,7 +285,8 @@ export default function RoutePlanner() {
 
       {result.status === "error" && (
         <div className="card">
-          <span className="status-chip status-chip--error">{result.errorCode ?? "ERROR"}</span>
+          <span className="status-chip status-chip--error">{result.errorCode ?? "ERROR"}</span>{" "}
+          {result.errorCode && ["NO_PASSABLE_ROUTE", "INSUFFICIENT_TERRAIN_DATA"].includes(result.errorCode) && <ClassChip c="NO_VALID_ROUTE" />}
           <div className="error-text">{result.error}</div>
           <div className="hint">No route is shown: the planner never draws a line it could not compute on real DEM data.</div>
         </div>
@@ -200,7 +295,7 @@ export default function RoutePlanner() {
         <>
           <div className="kv">
             <span className="label">Status</span>
-            <span className="status-chip status-chip--ready">{r.status}</span>
+            <span className="status-chip status-chip--ready">{r.status}</span> <ClassChip c={r.route_classification} />
           </div>
           <div className="hint small">
             DEM {r.dataset.name} ({r.dataset.resolution_m ? formatDistance(r.dataset.resolution_m) : "?"}/cell), grid {r.grid.rows}×{r.grid.cols}
@@ -216,6 +311,7 @@ export default function RoutePlanner() {
             yLabel={`elevation, m (${r.dataset.vertical_datum})`}
             formatX={(v) => v.toFixed(0)}
           />
+          {r.comparison && <Comparison c={r.comparison} />}
           {r.return_route && <Summary title="Return route" r={r.return_route} />}
           {r.alternative_route ? <Summary title="Alternative route" r={r.alternative_route} /> : r.alternative_note && <div className="hint">{r.alternative_note}</div>}
           <div className="hint small">{r.disclaimer}</div>

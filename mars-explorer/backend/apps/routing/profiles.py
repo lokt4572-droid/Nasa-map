@@ -5,16 +5,29 @@ They are NOT scientifically validated parameters of human locomotion in a spaces
 of any rover. They only make the planner prefer gentler, smoother, better-known terrain.
 Change them here; every route response echoes the profile that was used.
 
-Cost of a step between neighbouring DEM cells (8-connected grid):
+Cost of a step between neighbouring DEM cells (8-connected grid), v0.3:
 
-    cost = d3 * (1 + slope_weight * (grade / max_slope_deg)^2
-                   + roughness_weight * min(tri / roughness_ref_m, 1))
-         * (unknown_multiplier if a cell has no DEM value else 1)
+    cost = d3 * (1                                                  distance
+                 + slope_weight * (grade / max_slope_deg)^2          slope
+                 + roughness_weight * min(tri / roughness_ref_m, 1)  roughness
+                 + hazard_proximity_weight * proximity)             hazard proximity
+              * (unknown_multiplier if a cell has no DEM value else 1)   uncertainty
 
 d3 = 3-D step length (horizontal geodesic step + elevation change), grade = step slope
-in degrees, tri = Terrain Ruggedness Index of the destination cell (3x3, metres).
-A step is forbidden when grade > max_slope_deg or the destination cell slope >
-max_slope_deg, or the cell is inside a hazard buffer.
+in degrees, tri = Terrain Ruggedness Index of the destination cell (3x3, metres),
+proximity = 0..1, rising from 0 at twice the hazard's buffered radius to 1 at its edge.
+
+A step is forbidden when
+- the destination cell is inside a hazard disc (hazard radius + hazard_buffer_m);
+- grade > max_slope_deg or the destination cell's slope > max_slope_deg;
+- a cell has no DEM value and the unknown-data policy is REJECT;
+- it is a DIAGONAL step and either of the two orthogonal cells it passes between is not
+  passable (no corner cutting between blocked, steep or NoData cells).
+
+Unknown-data policy: REJECT (CONSERVATIVE default — terrain without DEM data is never
+entered) or ALLOW_MARKED (STANDARD — allowed at a heavy penalty, up to max_unknown_fraction
+of the distance; every such segment is returned as UNVERIFIED and the route is classified
+PARTIALLY_UNVERIFIED_ROUTE).
 """
 from __future__ import annotations
 
@@ -34,6 +47,11 @@ class MovementProfile:
     unknown_multiplier: float
     hazard_buffer_m: float
     max_unknown_fraction: float  # reject routes with more unknown terrain than this (by distance)
+    hazard_proximity_weight: float = 0.0
+
+    @property
+    def unknown_policy(self) -> str:
+        return "ALLOW_MARKED" if self.allow_unknown_terrain else "REJECT"
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -41,6 +59,7 @@ class MovementProfile:
         for k, v in d.items():
             if isinstance(v, float) and not math.isfinite(v):
                 d[k] = None
+        d["unknown_data_policy"] = self.unknown_policy
         d["disclaimer"] = "Engineering heuristic; not a validated human/rover traversability model."
         return d
 
@@ -57,6 +76,7 @@ PROFILES: dict[str, MovementProfile] = {
         unknown_multiplier=float("inf"),
         hazard_buffer_m=500.0,
         max_unknown_fraction=0.0,
+        hazard_proximity_weight=1.0,
     ),
     "STANDARD": MovementProfile(
         id="STANDARD",
@@ -69,6 +89,7 @@ PROFILES: dict[str, MovementProfile] = {
         unknown_multiplier=5.0,
         hazard_buffer_m=100.0,
         max_unknown_fraction=0.2,
+        hazard_proximity_weight=0.5,
     ),
 }
 

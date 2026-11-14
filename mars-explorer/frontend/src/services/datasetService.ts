@@ -65,7 +65,7 @@ export const updateHazard = (id: number, body: Partial<HazardInput>) =>
 export const deleteHazard = (id: number) => apiRequest<void>(`/hazards/${id}/`, { method: "DELETE" });
 
 // --- routing (v0.2)
-import type { RoutePlanResponse, RoutePoint, RouteProfile, RouteProfileId } from "../types/api";
+import type { RoutePlanResponse, RoutePoint, RouteProfile, RouteProfileId, UnknownDataPolicy } from "../types/api";
 export const getRouteProfiles = () => apiRequest<RouteProfile[]>("/routes/profiles/");
 export const planRoute = (body: {
   start: RoutePoint;
@@ -74,6 +74,7 @@ export const planRoute = (body: {
   profile: RouteProfileId;
   include_return?: boolean;
   include_alternative?: boolean;
+  unknown_data_policy?: UnknownDataPolicy;
   mission?: number;
 }) => apiRequest<RoutePlanResponse>("/routes/plan/", { method: "POST", body, timeoutMs: 120_000 });
 export const deleteRoute = (id: number) => apiRequest<void>(`/routes/${id}/`, { method: "DELETE" });

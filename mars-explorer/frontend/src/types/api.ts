@@ -219,7 +219,50 @@ export interface RouteProfile {
   unknown_multiplier: number | null;
   hazard_buffer_m: number;
   max_unknown_fraction: number;
+  hazard_proximity_weight?: number;
+  unknown_data_policy?: UnknownDataPolicy;
   disclaimer: string;
+}
+
+export type UnknownDataPolicy = "REJECT" | "ALLOW_MARKED";
+export type RouteClassification = "KNOWN_TERRAIN_ROUTE" | "PARTIALLY_UNVERIFIED_ROUTE" | "NO_VALID_ROUTE";
+
+export interface RouteMetrics {
+  distance_m: number;
+  distance_3d_m: number;
+  elevation_gain_m: number;
+  elevation_loss_m: number;
+  max_step_grade_deg: number;
+  max_cell_slope_deg: number;
+  known_terrain_pct: number;
+  nodata_pct_along_route: number;
+  cost: number;
+  terrain_cost: number;
+  dem_source?: string;
+  dem_name?: string;
+  dem_instrument?: string;
+  dem_resolution_m?: number | null;
+  grid_cell_size_m?: { dx_min: number; dx_max: number; dy_mean: number };
+  window_nodata_pct?: number;
+  suitability_class?: string;
+}
+
+export interface RouteBrief {
+  label: string;
+  classification: RouteClassification;
+  distance_m: number;
+  cost: number;
+  terrain_cost: number;
+  elevation_gain_m: number;
+  max_cell_slope_deg: number;
+  known_terrain_pct: number;
+}
+
+export interface RouteComparison {
+  route_a: RouteBrief;
+  route_b: RouteBrief | null;
+  difference_b_minus_a?: { distance_m: number; terrain_cost: number; cost: number };
+  note: string;
 }
 
 export interface RouteSummary {
@@ -234,11 +277,19 @@ export interface RouteSummary {
   unknown_terrain_fraction: number;
   elevation_profile: { distance_m: number; elevation_m: number | null }[];
   overlap_with_primary?: number;
+  // v0.3 (absent on routes saved by v0.2)
+  classification?: RouteClassification;
+  unverified_segments?: { from_m: number; to_m: number; status: "UNVERIFIED_NO_DEM_DATA" }[];
+  max_cell_slope_deg?: number;
+  geometry_simplified?: { type: "LineString"; coordinates: [number, number][] };
+  metrics?: RouteMetrics;
 }
 
 export interface RoutePlanResponse {
   id: number;
   status: "ROUTE_FOUND";
+  route_classification?: RouteClassification;
+  comparison?: RouteComparison;
   route: RouteSummary;
   return_route?: RouteSummary | null;
   alternative_route?: RouteSummary | null;
@@ -268,6 +319,7 @@ export interface RouteDataQuality {
     astronaut_scale_route_safety: "NOT_SUITABLE" | "NOT_ASSESSED_NO_VALIDATED_MODEL";
     reason: string;
   };
+  planning_scope?: { scope: string; reason: string };
 }
 
 export interface RoutePoint extends MarsPointFields {

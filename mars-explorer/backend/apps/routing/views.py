@@ -39,6 +39,7 @@ class RoutePlanRequestSerializer(serializers.Serializer):
     include_return = serializers.BooleanField(default=True)
     include_alternative = serializers.BooleanField(default=True)
     max_slope_deg = serializers.FloatField(min_value=1.0, max_value=45.0, required=False)
+    unknown_data_policy = serializers.ChoiceField(choices=["REJECT", "ALLOW_MARKED"], required=False)
     mission = serializers.IntegerField(required=False, min_value=1)
     dataset = serializers.IntegerField(required=False, min_value=1)
 
@@ -51,6 +52,10 @@ class RoutePlanRequestSerializer(serializers.Serializer):
         pts = [attrs["start"], *attrs["waypoints"], attrs["end"]]
         if len({(p["crs"], p["latitude_convention"], p["planet"]) for p in pts}) != 1:
             raise serializers.ValidationError("All points must use the same crs, latitude_convention and planet")
+        if attrs.get("unknown_data_policy") == "ALLOW_MARKED" and attrs.get("profile", "CONSERVATIVE") != "STANDARD":
+            raise serializers.ValidationError(
+                {"unknown_data_policy": "Crossing terrain without DEM data is only possible with the STANDARD profile, where it is marked UNVERIFIED"}
+            )
         return attrs
 
 
@@ -58,6 +63,7 @@ def _failure(status_code: str, reason: str, details=None, http=422) -> Response:
     return Response(
         {
             "status": status_code,
+            "route_classification": pathfinder.CLASS_NONE,
             "route": None,
             "reason": reason,
             "details": details or {},
@@ -100,7 +106,35 @@ def _data_quality(ds, grid: dict, lat_conv: str, route: dict | None) -> dict:
         "route_unknown_terrain_fraction": route["unknown_terrain_fraction"] if route else None,
         "latitude_handling": lat_status,
         "resolution_assessment": assess_resolution(effective, ds.resolution_meters),
+        "planning_scope": planning_scope(ds, effective),
     }
+
+
+def planning_scope(ds, effective_cell_m: float) -> dict:
+    """MOLA-derived DEMs are regional planning only, whatever their gridding: MOLA shots are
+    ~300 m apart along track and kilometres apart across track, so gridded values between
+    tracks are interpolated, not measured."""
+    is_mola = "MOLA" in f"{ds.instrument} {ds.name} {ds.product_id}".upper()
+    cls = assess_resolution(effective_cell_m, ds.resolution_meters)["class"]
+    if is_mola or cls == "REGIONAL_PLANNING_ONLY":
+        return {
+            "scope": "REGIONAL_PLANNING_ONLY",
+            "reason": ("MOLA altimetry: regional planning only (track spacing, interpolation between tracks)"
+                       if is_mola else "DEM cells are larger than 100 m: regional planning only"),
+        }
+    return {"scope": cls, "reason": "set by the routing grid resolution"}
+
+
+def _route_metrics_with_dem(route: dict | None, ds, grid: dict, scope: dict) -> None:
+    if not route:
+        return
+    cs = grid.get("cell_size_m") or {}
+    route["metrics"].update(
+        dem_source=ds.source, dem_name=ds.name, dem_instrument=ds.instrument,
+        dem_resolution_m=ds.resolution_meters, grid_cell_size_m=cs,
+        window_nodata_pct=round(100 * (grid.get("nodata_fraction") or 0.0), 2),
+        suitability_class=scope["scope"],
+    )
 
 
 @api_view(["POST"])
@@ -114,6 +148,9 @@ def plan(request):
     profile = get_profile(v["profile"])
     if "max_slope_deg" in v:
         profile = pathfinder.MovementProfile(**{**profile.__dict__, "max_slope_deg": min(v["max_slope_deg"], profile.max_slope_deg)})
+    if v.get("unknown_data_policy") == "REJECT" and profile.allow_unknown_terrain:
+        profile = pathfinder.MovementProfile(**{**profile.__dict__, "allow_unknown_terrain": False,
+                                                "unknown_multiplier": float("inf"), "max_unknown_fraction": 0.0})
     if not dem_reader.raster_backend_status()["available"]:
         raise ApiError("Raster backend (GDAL) not available", code="DEM_BACKEND_UNAVAILABLE", status_code=503)
 
@@ -144,6 +181,8 @@ def plan(request):
         raise ApiError(str(exc), code="DEM_READ_ERROR", status_code=500) from exc
 
     result["data_quality"] = _data_quality(ds, result["grid"], lat_conv, result["route"])
+    for key in ("route", "return_route", "alternative_route"):
+        _route_metrics_with_dem(result.get(key), ds, result["grid"], result["data_quality"]["planning_scope"])
     result.update(
         profile=profile.to_dict(),
         dataset={"id": ds.id, "name": ds.name, "resolution_m": ds.resolution_meters, "vertical_datum": ds.vertical_datum, "source": ds.source},

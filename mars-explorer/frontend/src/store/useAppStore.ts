@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { textureFor } from "../config/planetTextures";
 
 import { ALL_LAYERS, layersForPlanet } from "../config/mapLayers";
 import type { GibsDiscovery } from "../services/earthService";
@@ -111,6 +112,12 @@ interface AppState {
   earth: EarthState;
 
   setLayerVisible: (id: string, visible: boolean) => void;
+  /** MAP = 2D map (or Earth's own 2D/Cesium views), GLOBE = Three.js textured globe */
+  bodyView: "MAP" | "GLOBE";
+  setBodyView: (v: "MAP" | "GLOBE") => void;
+  /** centre to apply when the 2D map mounts (e.g. "Open in 2D map" from the globe) */
+  pendingMapCenter: { lon: number; lat: number; resolution?: number } | null;
+  setPendingMapCenter: (c: { lon: number; lat: number; resolution?: number } | null) => void;
   /** auto high-resolution mode changes (never touch activeLayerId or user choices) */
   applyAutoLayers: (changes: { id: string; visible: boolean }[]) => void;
   setLayerOpacity: (id: string, opacity: number) => void;
@@ -217,6 +224,10 @@ export const useAppStore = create<AppState>((set) => ({
     flyTo: null,
   },
 
+  bodyView: "MAP",
+  setBodyView: (bodyView) => set({ bodyView }),
+  pendingMapCenter: null,
+  setPendingMapCenter: (pendingMapCenter) => set({ pendingMapCenter }),
   setLayerVisible: (id, visible) =>
     set((s) => ({
       // An explicit user choice: auto mode keeps its hands off this layer from now on.
@@ -250,6 +261,9 @@ export const useAppStore = create<AppState>((set) => ({
         ? {}
         : {
             planet,
+            // Keep the globe when the new body has one, otherwise fall back to the map.
+            bodyView: s.bodyView === "GLOBE" && textureFor(planet) ? "GLOBE" : "MAP",
+            pendingMapCenter: null,
             activeLayerId: defaultLayerFor(planet),
             selectedPoint: null,
             pointInfo: emptyPointInfo(),

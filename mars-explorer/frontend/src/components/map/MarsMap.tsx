@@ -112,6 +112,13 @@ export default function MarsMap() {
   useEffect(() => {
     const h = createMarsMap(targetRef.current ?? undefined, planet);
     handleRef.current = h;
+    const pending = useAppStore.getState().pendingMapCenter;
+    if (pending) {
+      // e.g. "Open in 2D map" from the 3D globe
+      h.view.setCenter([pending.lon, pending.lat]);
+      h.view.setResolution(pending.resolution ?? 0.02197265625);
+      useAppStore.getState().setPendingMapCenter(null);
+    }
     mapController.setHandle(h);
     setMapReady(true);
     if (import.meta.env.DEV) (window as unknown as { __marsMap?: MarsMapHandle }).__marsMap = h; // dev-only inspection

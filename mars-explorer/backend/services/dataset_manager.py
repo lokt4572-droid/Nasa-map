@@ -23,7 +23,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from services import dem_reader
+from services import dem_reader, remote_raster
 from services.mars_coordinates import (
     LatitudeConvention,
     LongitudeConvention,
@@ -128,6 +128,7 @@ def validate_dem(
     data_type: str = "DEM",
     planet: str = DEFAULT_PLANET,
     vertical_datum: str | None = None,
+    control_points: bool = True,
 ) -> ValidationReport:
     """Inspect a raster and decide whether it can be used as a numeric DEM."""
     from pyproj import CRS
@@ -255,6 +256,9 @@ def validate_dem(
         report.errors.append(f"Reading values failed: {exc}")
         report.step("CHECK_VALUES", "ERROR", str(exc))
 
+    if not control_points:
+        report.step("CONTROL_POINTS", "SKIPPED", "remote product: no per-cell probe requests")
+        return report
     try:
         report.control_points = dem_reader.control_points(path)
         n_ok = sum(1 for p in report.control_points if p["value"] is not None)
@@ -364,7 +368,7 @@ def register_dataset(
 
 def refresh_file_status(dataset) -> bool:
     """Mark a dataset MISSING if its file disappeared. Returns True if the file exists."""
-    exists = Path(dataset.file_path).is_file()
+    exists = remote_raster.file_available(dataset.file_path)
     if not exists and dataset.status != dataset.Status.MISSING:
         dataset.status = dataset.Status.MISSING
         dataset.is_validated = False

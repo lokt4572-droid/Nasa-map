@@ -29,7 +29,7 @@ from typing import Any
 import numpy as np
 
 from apps.routing.profiles import MovementProfile
-from services import dem_reader
+from services import remote_raster, dem_reader
 from services.mars_coordinates import adapt_latitude
 
 MAX_GRID_SIDE = 300
@@ -99,7 +99,7 @@ def build_grid(ds, points_ds: list[tuple[float, float]], to_query, max_side: int
     from rasterio.windows import Window
 
     ds_crs = CRS.from_wkt(ds.crs)
-    with rasterio.open(ds.file_path) as src:
+    with remote_raster.open_raster(ds.file_path) as src:
         t = src.transform
         if t.b != 0 or t.d != 0:
             raise RoutePlanningError(STATUS_INSUFFICIENT, "Rotated DEM grids are not supported")

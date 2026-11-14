@@ -2,6 +2,8 @@ from pathlib import Path
 
 from rest_framework import serializers
 
+from services import remote_raster
+
 from .models import Dataset
 
 
@@ -14,7 +16,7 @@ class DatasetSerializer(serializers.ModelSerializer):
         read_only_fields = [f.name for f in Dataset._meta.fields]
 
     def get_file_exists(self, obj: Dataset) -> bool:
-        return Path(obj.file_path).is_file()
+        return remote_raster.file_available(obj.file_path)
 
 
 class DatasetMetadataSerializer(serializers.ModelSerializer):

@@ -197,12 +197,12 @@ def area_statistics(ds, bbox_dataset: tuple[float, float, float, float], max_cel
     """Elevation statistics inside a bbox given in the DATASET CRS (left, bottom, right, top).
 
     Only the window covering the bbox is read; it is decimated to at most max_cells."""
-    from services import dem_reader
+    from services import remote_raster, dem_reader
 
     rasterio = dem_reader._import_rasterio()
     from rasterio.windows import from_bounds
 
-    with rasterio.open(ds.file_path) as src:
+    with remote_raster.open_raster(ds.file_path) as src:
         win = from_bounds(*bbox_dataset, transform=src.transform).round_offsets().round_lengths()
         win = win.intersection(rasterio.windows.Window(0, 0, src.width, src.height))
         if win.width < 1 or win.height < 1:

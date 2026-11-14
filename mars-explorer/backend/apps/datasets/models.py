@@ -59,6 +59,12 @@ class Dataset(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AVAILABLE)
     validation_messages = models.JSONField(default=list, blank=True)
     metadata = models.JSONField(default=dict, blank=True, help_text="Full GDAL inspection result")
+    # v0.4: where the values are read from, the real footprint and the provider's quality data.
+    access = models.CharField(max_length=12, default="LOCAL", help_text="LOCAL file or REMOTE_COG (HTTP range reads)")
+    footprint = models.JSONField(null=True, blank=True, help_text="GeoJSON footprint in planetocentric lon/lat, from the provider")
+    quality = models.JSONField(default=dict, blank=True, help_text="Provider quality metadata (valid %, QA links)")
+    quality_status = models.CharField(max_length=30, default="NOT_DOCUMENTED")
+    source_url = models.URLField(max_length=500, blank=True, help_text="Catalogue record of the product")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

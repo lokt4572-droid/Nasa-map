@@ -23,6 +23,9 @@ from services.mars_coordinates import transform_point
 logger = logging.getLogger("mars.dem")
 
 
+from services import remote_raster
+
+
 class RasterBackendUnavailable(RuntimeError):
     pass
 
@@ -97,11 +100,11 @@ class RasterInfo:
 
 def inspect_raster(path: str | Path) -> RasterInfo:
     rasterio = _import_rasterio()
-    p = Path(path)
-    if not p.is_file():
-        raise FileNotFoundError(f"File not found: {p}")
+    p = path if remote_raster.is_remote(path) else Path(path)
+    if not remote_raster.file_available(p):
+        raise FileNotFoundError("Raster not found" if remote_raster.is_remote(path) else f"File not found: {p}")
     try:
-        with rasterio.open(p, "r") as src:
+        with remote_raster.open_raster(path) as src:
             crs = src.crs
             crs_name = None
             crs_geo = None
@@ -210,7 +213,7 @@ def sample_point(path: str | Path, x: float, y: float, point_crs) -> PointSample
     rasterio = _import_rasterio()
     from rasterio.windows import Window
 
-    with rasterio.open(Path(path), "r") as src:
+    with remote_raster.open_raster(path) as src:
         row, col, xd, yd = _locate(src, x, y, point_crs)
         raw = src.read(1, window=Window(col, row, 1, 1), masked=True)
         units = src.units[0] if src.units and src.units[0] else None
@@ -244,7 +247,7 @@ def read_window(path: str | Path, x: float, y: float, point_crs, half_size: int 
 
     if half_size < 1:
         raise ValueError("half_size must be >= 1")
-    with rasterio.open(Path(path), "r") as src:
+    with remote_raster.open_raster(path) as src:
         row, col, xd, yd = _locate(src, x, y, point_crs)
         size = 2 * half_size + 1
         win = Window(col - half_size, row - half_size, size, size)
@@ -284,7 +287,7 @@ def overview_statistics(path: str | Path, max_side: int = OVERVIEW_MAX_SIDE) -> 
 
     Values are approximate (computed on at most max_side x max_side cells) and labelled so."""
     rasterio = _import_rasterio()
-    with rasterio.open(Path(path), "r") as src:
+    with remote_raster.open_raster(path) as src:
         factor = max(1, int(math.ceil(max(src.width, src.height) / max_side)))
         out_shape = (max(1, src.height // factor), max(1, src.width // factor))
         data = src.read(1, out_shape=out_shape, masked=True)
@@ -318,7 +321,7 @@ def control_points(path: str | Path) -> list[dict[str, Any]]:
     from rasterio.windows import Window
 
     pts = []
-    with rasterio.open(Path(path), "r") as src:
+    with remote_raster.open_raster(path) as src:
         h, w = src.height, src.width
         cells = [(h // 2, w // 2), (h // 4, w // 4), (h // 4, 3 * w // 4), (3 * h // 4, w // 4), (3 * h // 4, 3 * w // 4)]
         scale = float(src.scales[0]) if src.scales else 1.0
@@ -339,6 +342,8 @@ LABEL_SUFFIXES = {".xml", ".lbl"}
 def read_label_text(path: str | Path, max_bytes: int = 2_000_000) -> str | None:
     """Return the text of a PDS3/PDS4 label (the file itself if it is a label, or a
     sibling .xml/.lbl with the same stem). Used only to *report* what the label states."""
+    if remote_raster.is_remote(path):
+        return None  # remote products: the datum statement comes from the provider's catalogue
     p = Path(path)
     candidates = [p] if p.suffix.lower() in LABEL_SUFFIXES else []
     candidates += [p.with_suffix(s) for s in (".xml", ".lbl", ".XML", ".LBL")]

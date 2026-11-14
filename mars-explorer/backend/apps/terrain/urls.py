@@ -14,4 +14,5 @@ urlpatterns = [
     path("render/", views.render, name="terrain-render"),
     path("coverage/", views.coverage, name="terrain-coverage"),
     path("patch/", views.patch, name="terrain-patch"),
+    path("profile/", views.profile, name="terrain-profile"),
 ]

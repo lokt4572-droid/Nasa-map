@@ -98,6 +98,10 @@ def _dataset_summary(ds) -> dict:
         "latitude_convention": ds.latitude_convention,
         "vertical_datum": ds.vertical_datum,
         "units": ds.units,
+        "access": ds.access,
+        "license": ds.license,
+        "quality_status": ds.quality_status,
+        "source_url": ds.source_url or None,
     }
 
 
@@ -322,23 +326,32 @@ def _bbox_param(request, planet: str):
 
 @api_view(["GET"])
 def coverage(request):
+    """DEMs covering a point. ``remote=1`` also asks the provider catalogue (USGS STAC) for
+    DTM products that are not registered yet; they are listed, not read."""
     lon, lat, crs, lat_conv, query = _parse_point(request)
     backend = dem_reader.raster_backend_status()
     covering = list(_covering_existing(request, lon, lat, crs, lat_conv, query["planet"])) if backend["available"] else []
+    body = {
+        "query": query,
+        "raster_backend": backend,
+        "datasets": [_dataset_summary(d) for d in covering],
+    }
+    remote_usable = 0
+    if request.query_params.get("remote") == "1" and backend["available"]:
+        from apps.datasets.services import coverage_service
+
+        found = coverage_service.at_point(lon, lat, crs, lat_conv, query["planet"], include_remote=True)
+        body["catalogue"] = {"provider": found["provider"], "products": [r for r in found["datasets"] if r["status"] in ("ONLINE_SOURCE", "INVALID")]}
+        body["best"] = found["best"]
+        remote_usable = sum(1 for r in body["catalogue"]["products"] if r["status"] == "ONLINE_SOURCE")
     if not backend["available"]:
-        analysis_status = "ERROR"
+        body["terrain_analysis_status"] = "ERROR"
     elif covering:
-        analysis_status = "AVAILABLE"
+        body["terrain_analysis_status"] = "AVAILABLE"
     else:
-        analysis_status = "NO DATA"
-    return Response(
-        {
-            "query": query,
-            "terrain_analysis_status": analysis_status,
-            "raster_backend": backend,
-            "datasets": [_dataset_summary(d) for d in covering],
-        }
-    )
+        body["terrain_analysis_status"] = "NO DATA"
+    body["coverage_status"] = "AVAILABLE" if covering else ("AVAILABLE_REMOTE" if remote_usable else "NO_DATA_COVERAGE")
+    return Response(body)
 
 
 @api_view(["GET"])
@@ -403,14 +416,28 @@ def _float_param(request, name: str, default: float, lo: float, hi: float) -> fl
     return val
 
 
+def _auto_radius(ds, max_dim: int, limits: tuple[float, float]) -> float:
+    """Radius that shows the DEM at its own resolution (one mesh cell per DEM cell)."""
+    native = float(ds.resolution_meters or 0.0)
+    return min(max(native * max_dim / 2.0, limits[0]), limits[1]) if native else 20_000.0
+
+
 @api_view(["GET"])
 def patch(request):
     """Elevation grid around a point for the local 3D terrain viewer.
 
-    Query: planet, longitude|lon, latitude|lat, radius_m (100..500000, default 20000),
-    max_dimension (16..512, default 256), optional dataset, crs, lat_convention.
-    404 DEM_NOT_AVAILABLE when no validated DEM covers the point; 422 when the DEM is too
-    coarse for the requested radius (the response says the minimum radius)."""
+    Query: planet, longitude|lon, latitude|lat, radius_m (100..500000; default = the radius that
+    shows the chosen DEM at native resolution), max_dimension (16..512, default 256), optional
+    dataset (id), crs, lat_convention, and
+
+    * ``source=local`` (default): registered DEMs only;
+    * ``source=auto``: also the provider catalogue — the finest DTM product covering the point is
+      validated and registered for remote window reads (no bulk download);
+    * ``product=<collection>/<product_id>``: that catalogue product.
+
+    404 DEM_NOT_AVAILABLE when no validated DEM covers the point; 422 when the DEM is too coarse
+    for the requested radius (the response says the minimum radius)."""
+    from apps.datasets.services import coverage_service, dataset_discovery, stac_client
     from services import terrain_patch
 
     qp = request.query_params.copy()
@@ -418,24 +445,148 @@ def patch(request):
         if long_name in qp and short not in qp:
             qp[short] = qp[long_name]
     request._request.GET = qp  # accept both spellings
-    radius = _float_param(request, "radius_m", 20_000.0, *terrain_patch.RADIUS_LIMITS_M)
     max_dim = _int_param(request, "max_dimension", 256, *terrain_patch.DIMENSION_LIMITS)
+    source = (qp.get("source") or "local").lower()
+    if source not in ("local", "auto"):
+        raise ApiError("source must be local or auto", code="VALIDATION_ERROR")
     lon, lat, crs, lat_conv, query = _parse_point(request)
     _require_backend()
-    candidates = list(_covering_existing(request, lon, lat, crs, lat_conv, query["planet"]))
+    planet = query["planet"]
+    selection = {"mode": source, "reason": "finest registered DEM covering the point"}
+
+    def _register(product: dict):
+        try:
+            return dataset_discovery.register_remote_dem(product)
+        except dataset_discovery.DiscoveryError as exc:
+            http = {"REMOTE_DEM_DISABLED": 503, "DEM_READ_ERROR": 502}.get(exc.code, 422)
+            raise ApiError(str(exc), code=exc.code, status_code=http, details=exc.details) from exc
+
+    forced = None
+    if qp.get("product"):
+        coll, _, pid = qp["product"].partition("/")
+        try:
+            forced = _register(stac_client.get_product(coll, pid))
+        except stac_client.StacError as exc:
+            raise ApiError(str(exc), code=exc.code, status_code=404 if exc.code == "NOT_FOUND" else 502) from exc
+        selection = {"mode": "product", "reason": "catalogue product chosen by the user"}
+    elif source == "auto" and not qp.get("dataset"):
+        found = coverage_service.at_point(lon, lat, crs, lat_conv, planet, include_remote=True)
+        selection["provider"] = found["provider"]
+        # Try catalogue products finest-first until one validates; a product that fails is
+        # reported, and the next one (or the registered DEMs) is used instead.
+        skipped = []
+        local_best = min((r["resolution_m"] for r in found["datasets"] if r["status"] in ("LOCAL", "REMOTE_REGISTERED") and r["resolution_m"]), default=float("inf"))
+        for rec in found["datasets"]:
+            if rec["status"] != "ONLINE_SOURCE" or (rec["resolution_m"] or float("inf")) >= local_best:
+                continue
+            try:
+                forced = dataset_discovery.register_remote_dem(rec)
+                selection["reason"] = "finest valid DTM covering the point (provider catalogue)"
+                break
+            except dataset_discovery.DiscoveryError as exc:
+                skipped.append({"product_id": rec["product_id"], "code": exc.code, "message": str(exc)})
+        if skipped:
+            selection["skipped_products"] = skipped
+
+    candidates = list(_covering_existing(request, lon, lat, crs, lat_conv, planet))
+    if forced is not None and forced.id not in {d.id for d in candidates}:
+        if qp.get("product"):
+            raise ApiError("The chosen product does not cover this point", code="DEM_NOT_AVAILABLE", status_code=404,
+                           details={"query": query, "coverage_status": "NO_DATA_COVERAGE"})
+        forced = None  # outside the raster's bounds after all: fall back to registered DEMs
     if not candidates:
-        raise _not_available(query)
-    ds = min(candidates, key=lambda d: d.resolution_meters or float("inf"))  # finest covering DEM
+        err = _not_available(query)
+        if selection.get("skipped_products"):
+            err.details["skipped_products"] = selection["skipped_products"]
+        if selection.get("provider"):
+            err.details["provider"] = selection["provider"]
+        raise err
+    ds = forced or min(candidates, key=lambda d: d.resolution_meters or float("inf"))  # finest covering DEM
+    radius = (_float_param(request, "radius_m", 20_000.0, *terrain_patch.RADIUS_LIMITS_M) if qp.get("radius_m")
+              else _auto_radius(ds, max_dim, terrain_patch.RADIUS_LIMITS_M))
     _, lat_used, conv = dataset_manager.point_for_dataset(lon, lat, lat_conv, ds)
     try:
         body = terrain_patch.build_patch(ds, lon, lat, radius, max_dim, crs, lat_conv)
     except terrain_patch.PatchError as exc:
         raise ApiError(str(exc), code=exc.code, status_code=422, details={"query": query, **exc.details}) from exc
     except dem_reader.RasterReadError as exc:
-        raise ApiError(str(exc), code="DEM_READ_ERROR", status_code=500) from exc
+        raise ApiError(str(exc), code="DEM_READ_ERROR", status_code=502 if ds.access == "REMOTE_COG" else 500) from exc
     body["query"] = query
+    body["selection"] = selection
     body["latitude"] = _latitude_info(conv, lat, lat_used, ds)
     body["alternatives"] = [_dataset_summary(d) for d in candidates if d.id != ds.id]
     resp = Response(body)
     resp["Cache-Control"] = "private, max-age=300"
     return resp
+
+PROFILE_SAMPLES = (2, 1024)
+
+
+@api_view(["GET"])
+def profile(request):
+    """Elevation profile along the geodesic between two points.
+
+    Query: planet, from_lon, from_lat, to_lon, to_lat, samples (2..1024, default 200),
+    optional dataset, crs, lat_convention. Distances are geodesic on the body's ellipsoid;
+    elevations are nearest DEM cells (null = NoData, never interpolated)."""
+    import numpy as np
+    from pyproj import Geod
+
+    from services import raster_render
+    from services.planet_registry import get_planet
+
+    lon1, lat1, crs, lat_conv, q1 = _parse_point(request, "from_")
+    lon2, lat2, _, _, q2 = _parse_point(request, "to_")
+    n = _int_param(request, "samples", 200, *PROFILE_SAMPLES)
+    _require_backend()
+    planet = get_planet(q1["planet"])
+    first = {d.id: d for d in _covering_existing(request, lon1, lat1, crs, lat_conv, q1["planet"])}
+    both = [d for d in _covering_existing(request, lon2, lat2, crs, lat_conv, q1["planet"]) if d.id in first]
+    if not both:
+        raise ApiError(
+            "No validated DEM covers both profile end points", code="DEM_NOT_AVAILABLE", status_code=404,
+            details={"from": q1, "to": q2, "coverage_status": "NO_DATA_COVERAGE"},
+        )
+    ds = min(both, key=lambda d: d.resolution_meters or float("inf"))
+    geod = Geod(a=planet.radius_equatorial_m, b=planet.radius_polar_m)
+    az, _, total = geod.inv(lon1, lat1, lon2, lat2)
+    mid = geod.npts(lon1, lat1, lon2, lat2, n - 2) if n > 2 else []
+    pts = [(lon1, lat1), *mid, (lon2, lat2)]
+    lons = np.array([p[0] for p in pts])
+    lats = np.array([p[1] for p in pts])
+    try:
+        # Bounded read: about two DEM cells per sample at most (overviews are used for long lines).
+        budget = max(256, 2 * len(pts))
+        z = raster_render.sample_lonlat(ds, lons, lats, crs, lat_conv, max_read=(budget, budget))
+    except dem_reader.RasterReadError as exc:
+        raise ApiError(str(exc), code="DEM_READ_ERROR", status_code=500) from exc
+    dist = np.linspace(0.0, float(total), len(pts))
+    valid = np.isfinite(z)
+    dz = np.diff(z[valid]) if valid.sum() > 1 else np.array([])
+    spacing = float(total) / max(1, len(pts) - 1)
+    return Response({
+        "query": {"from": q1, "to": q2, "samples": len(pts)},
+        "dataset": _dataset_summary(ds),
+        "distance_m": float(total),
+        "initial_azimuth_deg": float(az),
+        "sample_spacing_m": spacing,
+        "native_resolution_m": ds.resolution_meters,
+        "oversampled": bool(ds.resolution_meters and spacing < ds.resolution_meters),
+        "points": [
+            {"distance_m": round(float(d), 2), "lon_east_deg": float(lo), "lat_deg": float(la),
+             "elevation_m": (round(float(v), 3) if np.isfinite(v) else None)}
+            for d, lo, la, v in zip(dist, lons, lats, z)
+        ],
+        "statistics": {
+            "min_m": float(np.nanmin(z)) if valid.any() else None,
+            "max_m": float(np.nanmax(z)) if valid.any() else None,
+            "total_ascent_m": float(dz[dz > 0].sum()) if dz.size else None,
+            "total_descent_m": float(-dz[dz < 0].sum()) if dz.size else None,
+            "nodata_percentage": round(100 * float(1 - valid.mean()), 3),
+        },
+        "vertical_datum": ds.vertical_datum,
+        "units": ds.units,
+        "notes": ["Nearest DEM cell per sample; NoData stays null.",
+                  "Long lines on a fine DEM are read from its overviews (decimated), bounded to about two cells per sample.",
+                  "Ascent/descent are sums over valid samples at this sample spacing, not a measured path."],
+    })

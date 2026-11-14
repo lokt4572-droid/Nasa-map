@@ -135,7 +135,7 @@ MARS_DATA_DIR = (_data_dir if _data_dir.is_absolute() else (BASE_DIR / _data_dir
 # Server-side only secret; not used by NASA Trek WMTS.
 NASA_API_KEY = os.environ.get("NASA_API_KEY", "")
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.4.0"
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOGGING = {
@@ -152,7 +152,14 @@ LOGGING = {
 }
 
 # --- External providers (v0.2). All overridable via environment variables.
-HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "MARS-EXPLORER/0.2 (planetary GIS prototype; local)")
+HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "MARS-EXPLORER/0.4 (planetary GIS prototype; local)")
+
+# Remote elevation data (v0.4): DTMs found in the USGS STAC catalogue are read window by window
+# with HTTP range requests. Set REMOTE_DEM_ENABLED=0 to keep the backend fully local.
+REMOTE_DEM_ENABLED = os.environ.get("REMOTE_DEM_ENABLED", "1") not in ("0", "false", "False", "")
+REMOTE_RASTER_HOSTS = tuple(
+    h.strip() for h in os.environ.get("REMOTE_RASTER_HOSTS", "astrogeo-ard.s3-us-west-2.amazonaws.com").split(",") if h.strip()
+)
 NOMINATIM_URL = os.environ.get("NOMINATIM_URL", "https://nominatim.openstreetmap.org/search")
 OPEN_METEO_URL = os.environ.get("OPEN_METEO_URL", "https://api.open-meteo.com/v1/forecast")
 NASA_POWER_URL = os.environ.get("NASA_POWER_URL", "https://power.larc.nasa.gov/api/temporal/daily/point")

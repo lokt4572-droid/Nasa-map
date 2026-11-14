@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from services import remote_raster
+
 E = dict[str, Any]
 
 CATALOG: list[E] = [
@@ -129,7 +131,7 @@ def catalog_with_status(planet: str | None = None, data_type: str | None = None)
             item["local_datasets"] = [{"id": d.id, "name": d.name, "status": d.status} for d in mine]
             if not mine:
                 item["status"] = "NOT_DOWNLOADED"
-            elif any(d.status == "VALID" and Path(d.file_path).is_file() for d in mine):
+            elif any(d.status == "VALID" and remote_raster.file_available(d.file_path) for d in mine):
                 item["status"] = "PARTIAL_COVERAGE" if e.get("partial") else "VALID"
             elif any(d.status == "INVALID" for d in mine):
                 item["status"] = "INVALID"

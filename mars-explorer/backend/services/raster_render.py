@@ -20,7 +20,7 @@ import zlib
 
 import numpy as np
 
-from services import dem_reader
+from services import remote_raster, dem_reader
 from services.mars_coordinates import planetocentric_to_planetographic, planetographic_to_planetocentric
 
 PRODUCTS = ("elevation", "hillshade", "slope", "aspect", "roughness")
@@ -81,49 +81,62 @@ def _adapt_lat_array(lats: np.ndarray, from_conv: str, to_conv: str) -> np.ndarr
 
 def sample_grid(ds, bbox: tuple[float, float, float, float], width: int, height: int, query_crs, lat_convention: str) -> np.ndarray:
     """DEM values (float64, NaN = nodata/outside) on a regular lon/lat grid over bbox."""
-    from pyproj import CRS, Transformer
-
-    rasterio = dem_reader._import_rasterio()
-    from rasterio.windows import Window
-
     west, south, east, north = bbox
     lons = west + (np.arange(width) + 0.5) * (east - west) / width
     lats = north - (np.arange(height) + 0.5) * (north - south) / height
-    lats = _adapt_lat_array(lats, lat_convention, ds.latitude_convention)
     lon_g, lat_g = np.meshgrid(lons, lats)
+    return sample_lonlat(ds, lon_g, lat_g, query_crs, lat_convention, max_read=(2 * height, 2 * width))
+
+
+def sample_lonlat(ds, lon_arr, lat_arr, query_crs, lat_convention: str, max_read: tuple[int, int] = (2048, 2048)) -> np.ndarray:
+    """DEM values (float64, NaN = nodata/outside) at arbitrary query-CRS points (nearest cell).
+
+    One bounded window read per contiguous column segment: the read is decimated so that it
+    never exceeds ``max_read`` (rows, cols) cells, whatever the distance between the points."""
+    from pyproj import CRS, Transformer
+
+    from rasterio.windows import Window
+
+    lon_arr = np.asarray(lon_arr, dtype="float64")
+    lat_arr = np.asarray(lat_arr, dtype="float64")
+    shape_out = lon_arr.shape
+    lats = _adapt_lat_array(lat_arr.ravel(), lat_convention, ds.latitude_convention).reshape(shape_out)
     ds_crs = CRS.from_wkt(ds.crs)
-    xs, ys = Transformer.from_crs(query_crs, ds_crs, always_xy=True).transform(lon_g, lat_g)
-    out = np.full((height, width), np.nan)
-    with rasterio.open(ds.file_path) as src:
+    xs, ys = Transformer.from_crs(query_crs, ds_crs, always_xy=True).transform(lon_arr, lats)
+    xs, ys = np.asarray(xs, dtype="float64"), np.asarray(ys, dtype="float64")
+    out = np.full(shape_out, np.nan)
+    with remote_raster.open_raster(ds.file_path) as src:
         t = src.transform
         if t.b != 0 or t.d != 0:
             raise RenderError("Rotated raster grids are not supported")
         period = dem_reader.x_wrap_period(ds_crs, src.bounds.left, src.bounds.right)
         if period:
             xs = (xs - src.bounds.left) % period + src.bounds.left
-        cols = np.floor((xs - t.c) / t.a).astype(np.int64)
-        rows = np.floor((ys - t.f) / t.e).astype(np.int64)
-        inside = (rows >= 0) & (rows < src.height) & (cols >= 0) & (cols < src.width) & np.isfinite(xs) & np.isfinite(ys)
+        finite = np.isfinite(xs) & np.isfinite(ys)
+        cols = np.floor((np.where(finite, xs, 0) - t.c) / t.a).astype(np.int64)
+        rows = np.floor((np.where(finite, ys, 0) - t.f) / t.e).astype(np.int64)
+        inside = (rows >= 0) & (rows < src.height) & (cols >= 0) & (cols < src.width) & finite
         if not inside.any():
             return out
         scale = float(src.scales[0]) if src.scales else 1.0
         offset = float(src.offsets[0]) if src.offsets else 0.0
-        # A grid that crosses the raster's x seam uses columns at both ends of the raster. Reading
-        # one window from the min to the max column would span the whole raster and decimate it
-        # (wrong cells), so each contiguous column segment is read on its own.
+        # Points on both sides of the raster's x seam use columns at both ends of the raster.
+        # Reading one window from the min to the max column would span the whole raster and
+        # decimate it (wrong cells), so each contiguous column segment is read on its own.
         for seg in _column_segments(cols[inside]):
             mask = inside & (cols >= seg[0]) & (cols <= seg[1])
             r0, r1 = int(rows[mask].min()), int(rows[mask].max())
             c0, c1 = seg
             wh, ww = r1 - r0 + 1, c1 - c0 + 1
-            fy = max(1, math.ceil(wh / (2 * height)))
-            fx = max(1, math.ceil(ww / (2 * width)))
+            fy = max(1, math.ceil(wh / max_read[0]))
+            fx = max(1, math.ceil(ww / max_read[1]))
             shape = (max(1, wh // fy), max(1, ww // fx))
             data = src.read(1, window=Window(c0, r0, ww, wh), out_shape=shape, masked=True)
             arr = np.ma.filled(data.astype("float64"), np.nan) * scale + offset
             rr = np.clip(((rows - r0) * shape[0]) // wh, 0, shape[0] - 1)
             cc = np.clip(((cols - c0) * shape[1]) // ww, 0, shape[1] - 1)
             out[mask] = arr[rr[mask], cc[mask]]
+    out[~np.isfinite(out)] = np.nan
     return out
 
 

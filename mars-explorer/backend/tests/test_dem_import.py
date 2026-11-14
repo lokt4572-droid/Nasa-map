@@ -25,6 +25,11 @@ def cell_center(row: int, col: int) -> tuple[float, float]:
 
 
 def import_dem(path, name="test-dem", **kw):
+    # v0.2: a DEM needs a known vertical datum. Synthetic fixtures have none in their
+    # metadata, so tests state one explicitly unless they test its absence (pass None).
+    kw.setdefault("vertical_datum", "synthetic test datum")
+    if kw["vertical_datum"] is None:
+        kw.pop("vertical_datum")
     out, err = StringIO(), StringIO()
     call_command("import_dem", "--file", str(path), "--name", name, stdout=out, stderr=err, **kw)
     return out.getvalue(), err.getvalue()

@@ -249,3 +249,80 @@ def read_window(path: str | Path, x: float, y: float, point_crs, half_size: int 
             crs=_dataset_pyproj_crs(src),
             units=src.units[0] if src.units and src.units[0] else None,
         )
+
+
+# ---------------------------------------------------------------------------
+# Import-time checks (v0.2). All reads are decimated or windowed: a global DEM is never
+# loaded into memory at full resolution.
+
+OVERVIEW_MAX_SIDE = 1024
+
+
+def overview_statistics(path: str | Path, max_side: int = OVERVIEW_MAX_SIDE) -> dict[str, Any]:
+    """Statistics of band 1 from a decimated read (nearest neighbour), after scale/offset.
+
+    Values are approximate (computed on at most max_side x max_side cells) and labelled so."""
+    rasterio = _import_rasterio()
+    with rasterio.open(Path(path), "r") as src:
+        factor = max(1, int(math.ceil(max(src.width, src.height) / max_side)))
+        out_shape = (max(1, src.height // factor), max(1, src.width // factor))
+        data = src.read(1, out_shape=out_shape, masked=True)
+        scale = float(src.scales[0]) if src.scales else 1.0
+        offset = float(src.offsets[0]) if src.offsets else 0.0
+        arr = np.ma.filled(data.astype("float64"), np.nan) * scale + offset
+        arr[~np.isfinite(arr)] = np.nan
+        valid = arr[~np.isnan(arr)]
+        res: dict[str, Any] = {
+            "sampled_shape": list(out_shape),
+            "decimation_factor": factor,
+            "valid_cells": int(valid.size),
+            "total_cells": int(arr.size),
+            "valid_fraction": float(valid.size) / float(arr.size) if arr.size else 0.0,
+            "approximate": factor > 1,
+        }
+        if valid.size:
+            res.update(
+                min=float(valid.min()),
+                max=float(valid.max()),
+                mean=float(valid.mean()),
+                median=float(np.median(valid)),
+            )
+        return res
+
+
+def control_points(path: str | Path) -> list[dict[str, Any]]:
+    """Read five control cells (centre + quadrant centres) by pixel index, without any
+    coordinate transformation, to prove that single-cell reads work."""
+    rasterio = _import_rasterio()
+    from rasterio.windows import Window
+
+    pts = []
+    with rasterio.open(Path(path), "r") as src:
+        h, w = src.height, src.width
+        cells = [(h // 2, w // 2), (h // 4, w // 4), (h // 4, 3 * w // 4), (3 * h // 4, w // 4), (3 * h // 4, 3 * w // 4)]
+        scale = float(src.scales[0]) if src.scales else 1.0
+        offset = float(src.offsets[0]) if src.offsets else 0.0
+        for row, col in cells:
+            raw = src.read(1, window=Window(col, row, 1, 1), masked=True)
+            x, y = src.xy(row, col)
+            value = None if np.ma.is_masked(raw) else float(raw[0, 0]) * scale + offset
+            if value is not None and not math.isfinite(value):
+                value = None
+            pts.append({"row": row, "col": col, "x_dataset": float(x), "y_dataset": float(y), "value": value})
+    return pts
+
+
+LABEL_SUFFIXES = {".xml", ".lbl"}
+
+
+def read_label_text(path: str | Path, max_bytes: int = 2_000_000) -> str | None:
+    """Return the text of a PDS3/PDS4 label (the file itself if it is a label, or a
+    sibling .xml/.lbl with the same stem). Used only to *report* what the label states."""
+    p = Path(path)
+    candidates = [p] if p.suffix.lower() in LABEL_SUFFIXES else []
+    candidates += [p.with_suffix(s) for s in (".xml", ".lbl", ".XML", ".LBL")]
+    for c in candidates:
+        if c.is_file() and c.suffix.lower() in LABEL_SUFFIXES:
+            with c.open("rb") as fh:
+                return fh.read(max_bytes).decode("utf-8", errors="replace")
+    return None

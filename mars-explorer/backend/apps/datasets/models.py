@@ -20,7 +20,17 @@ class Dataset(models.Model):
         ROUGHNESS = "ROUGHNESS", "Roughness"
         OTHER = "OTHER", "Other"
 
+    class Planet(models.TextChoices):
+        MARS = "MARS", "Mars"
+        EARTH = "EARTH", "Earth"
+        MOON = "MOON", "Moon"
+        MERCURY = "MERCURY", "Mercury"
+        VENUS = "VENUS", "Venus"
+
     name = models.SlugField(max_length=120, unique=True)
+    planet = models.CharField(max_length=10, choices=Planet.choices, default=Planet.MARS, db_index=True)
+    license = models.CharField(max_length=300, blank=True)
+    download_url = models.URLField(max_length=500, blank=True)
     source = models.CharField(max_length=200, blank=True, help_text="Archive / provider, e.g. NASA PDS Geosciences Node")
     instrument = models.CharField(max_length=120, blank=True, help_text="e.g. MGS MOLA, MRO HiRISE")
     product_id = models.CharField(max_length=200, blank=True)

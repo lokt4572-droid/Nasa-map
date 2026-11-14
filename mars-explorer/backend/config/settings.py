@@ -106,6 +106,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- CORS: only the configured frontend origin may call the API from a browser.
 CORS_ALLOWED_ORIGINS = env_list("FRONTEND_ORIGIN", "http://127.0.0.1:5173,http://localhost:5173")
+# Terrain render metadata headers must be readable by the frontend.
+CORS_EXPOSE_HEADERS = ["X-Visualization", "X-Value-Min", "X-Value-Max", "X-Value-Units", "X-Valid-Fraction", "X-Dataset"]
 
 # --- Django REST Framework
 REST_FRAMEWORK = {

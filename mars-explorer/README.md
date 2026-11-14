@@ -1,76 +1,43 @@
-# MARS EXPLORER — technical foundation v0.1
+# MARS EXPLORER — v0.2
 
-Interactive map of Mars for exploring the surface and preparing future crewed-mission
-planning tools. It uses real NASA Mars Trek WMTS layers for display and is prepared to
-read real DEMs (MOLA MEGDR, HiRISE DTM) for elevation and slope.
+Planetary GIS: real NASA maps of **Mars** (default), **Earth**, the **Moon**, **Mercury** and an experimental
+**Venus** preview; real DEM analysis and A* route planning for Mars; Earth satellite imagery, weather, search,
+geolocation and a 3D globe.
 
-**Ground rules built into the code:** no invented data. Imagery is never turned into
-elevation. If no validated DEM covers a point, the app shows `Elevation: DATA NOT
-AVAILABLE`. Route planning returns `501 NOT_IMPLEMENTED`. Nothing is labelled "safe".
+**Ground rules in the code:** no invented data. Imagery is never turned into elevation; missing DEM → `DATA NOT
+AVAILABLE`; no route is drawn without real terrain data (`INSUFFICIENT_TERRAIN_DATA`); nothing is called "safe";
+forecasts are labelled as model output; satellite dates come from GetCapabilities, never "today"; without a Cesium
+token the globe says "NO TERRAIN"; the app says "OFFLINE READY: NO" because map tiles need the network.
+
+## Start (Windows)
+* **One click:** `START-MARS-EXPLORER.bat` (or the Desktop shortcut) → http://127.0.0.1:5173 · stop: `STOP-MARS-EXPLORER.bat`
+* Manual: see [docs/SETUP.md](docs/SETUP.md).
 
 ## Layout
-
 ```
 mars-explorer/
-├── frontend/   React 19 + TypeScript (strict) + Vite + OpenLayers 10 + proj4 + Zustand
-├── backend/    Django 6 + DRF, SQLite; services/ (coordinates, DEM reader, terrain analysis, dataset manager)
-├── data/mars/  local scientific data (git-ignored) — see data/mars/README.md
-├── scripts/    check_data.py, inspect_dem.py
-└── docs/       DATA_SOURCES, API_ENDPOINTS, COORDINATE_SYSTEM, SETUP
+├── frontend/   React 19 + TS strict + Vite · OpenLayers 10 · proj4 · Zustand · CesiumJS (lazy) · fflate
+├── backend/    Django 6 + DRF · SQLite · GDAL (rasterio) · PROJ (pyproj) · NumPy/SciPy
+│   ├── apps/   core, datasets, missions, hazards, terrain, routing, planets, weather, geocoding, earth
+│   └── services/ planet_registry, mars_coordinates, dem_reader, terrain_analysis, raster_render, dataset_manager, gibs, http_client, source_health
+├── data/mars/  scientific data (git-ignored) — see data/mars/README.md
+├── tools/      one-click start/stop scripts
+└── docs/       SETUP, API_ENDPOINTS, DATA_SOURCES, COORDINATE_SYSTEM, PLANET_REGISTRY, EARTH_MODE,
+                OFFLINE_MODE, LICENSES_AND_ATTRIBUTION, UPGRADE_PLAN, IMPLEMENTATION_REPORT_V0.2
 ```
 
-## One-click start (Windows)
+## Highlights
+* **Mars:** 4 Trek layers; real PDS4 MOLA MEGDR imported and validated (datum read from the label); elevation, slope,
+  aspect, roughness, local relief, elevation difference, area stats; terrain visualization layers; A* planner with two
+  documented heuristic profiles, waypoints, return/alternative routes, elevation profile, unknown-terrain share; missions,
+  hazards, offline queue with conflict handling, ZIP mission packages.
+* **Earth:** OSM + NASA GIBS (date control from capabilities), place/coordinate search, measure, geolocation (user-triggered),
+  Open-Meteo forecast + NASA POWER history with charts, CesiumJS globe.
+* **Moon / Mercury:** Trek mosaics and hillshades in their own CRS; catalog of DEMs (GLD100, LOLA, MESSENGER 665 m).
+* **Venus:** honest preview (no Trek service; GTDR ≈ 5 km/px, radius values).
+* **Data Manager:** unified catalog for all bodies with status, licence and provenance; safe import workflow.
 
-* **Start:** double-click `START-MARS-EXPLORER.bat` (or the *MARS EXPLORER* shortcut on the
-  Desktop). It installs missing dependencies on first run, stops old copies of the servers,
-  starts backend + frontend in two minimized windows and opens http://127.0.0.1:5173.
-* **Stop:** double-click `STOP-MARS-EXPLORER.bat`.
-
-## Manual start (PowerShell)
-
-```powershell
-# backend
-cd backend
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pip install -r requirements-raster.txt
-Copy-Item .env.example .env
-python manage.py migrate
-python manage.py runserver          # http://127.0.0.1:8000/api/v1/health/
-
-# frontend (second terminal)
-cd frontend
-npm install
-npm run dev                          # http://localhost:5173
-```
-
-Details, environment variables and the Windows GDAL notes: [docs/SETUP.md](docs/SETUP.md).
-
-## What works
-
-* NASA Mars Trek WMTS layers loaded via GetCapabilities (MOLA global hillshade, MOLA+HRSC
-  blend, CTX Jezero, HiRISE Jezero), toggles, opacity, retry on failure.
-* Mars CRS registered in OpenLayers/proj4; pan/zoom; zoom to global / Jezero; cursor
-  coordinates; scale bar computed on the Mars ellipsoid.
-* Point selection → coordinates with CRS/conventions, layer source & resolution, DEM
-  coverage, elevation and slope **from a registered DEM only**.
-* Missions with waypoints (demo mode), hazard reports (CRUD, map symbols).
-* Dataset manager: `python manage.py import_dem` (+ `--dry-run`), `check_datasets`,
-  REST registration of files inside the data dir, UI Data Manager.
-* Terrain API: elevation (nearest cell), slope/aspect (Horn), TRI, nodata fraction,
-  explicit planetocentric/planetographic handling.
-* Local mission package (JSON export + IndexedDB copy).
-
-## Not implemented yet
-
-Route planning, validated hazard/traversability model, DEM interpolation, slope/
-hillshade raster products, DEM tile serving to the map, offline map tiles / service
-worker, authentication, astronaut positioning hardware, polar projections.
+Full status per feature: [docs/IMPLEMENTATION_REPORT_V0.2.md](docs/IMPLEMENTATION_REPORT_V0.2.md).
 
 ## Tests
-
-```powershell
-cd backend;  python manage.py test     # 69 tests
-cd frontend; npm test                  # 38 tests
-```
+`backend: python manage.py test` (130) · `frontend: npm test` (78).

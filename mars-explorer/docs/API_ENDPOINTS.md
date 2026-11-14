@@ -1,11 +1,9 @@
-# API endpoints — `/api/v1/`
+# API endpoints — `/api/v1/` (v0.2)
 
-Base URL (local): `http://127.0.0.1:8000/api/v1`. JSON only. No authentication in this
-first version (local single-user tool — add auth before exposing it on a network).
+Base URL (local): `http://127.0.0.1:8000/api/v1`. JSON unless stated. No authentication
+(local single-user tool — add auth before exposing it on a network).
 
 ## Error format
-
-Every error has the same envelope:
 
 ```json
 {"error": {"code": "DEM_NOT_AVAILABLE", "message": "…", "details": {}}}
@@ -13,122 +11,121 @@ Every error has the same envelope:
 
 | HTTP | code | When |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | invalid input; `details` holds field errors |
-| 404 | `NOT_FOUND` | unknown object id |
-| 404 | `DEM_NOT_AVAILABLE` | no validated DEM covers the point (`details.elevation = "DATA NOT AVAILABLE"`) |
-| 405 | `METHOD_NOT_ALLOWED` | e.g. PUT (use PATCH) |
-| 422 | `DATASET_INVALID`, `RASTER_UNREADABLE`, `TERRAIN_ANALYSIS_ERROR` | bad raster / not analysable |
-| 500 | `DEM_READ_ERROR`, `INTERNAL_ERROR` | read failure |
-| 501 | `NOT_IMPLEMENTED` | route planning |
-| 503 | `DEM_BACKEND_UNAVAILABLE` | rasterio/GDAL not installed |
+| 400 | `VALIDATION_ERROR`, `UNSUPPORTED_FILE_TYPE`, `PATH_OUTSIDE_DATA_DIR` | invalid input |
+| 404 | `NOT_FOUND`, `DEM_NOT_AVAILABLE` | unknown object / no DEM covers the point |
+| 409 | `CONFLICT` | stale `version` on PATCH (details.server = server copy) |
+| 413 | `FILE_TOO_LARGE` | register via API above `MAX_REGISTER_FILE_BYTES` |
+| 422 | `DATASET_INVALID`, `INSUFFICIENT_TERRAIN_DATA`, `NO_PASSABLE_ROUTE`, `TERRAIN_ANALYSIS_ERROR` | data cannot support the request |
+| 429 | `RATE_LIMITED` | geocoding faster than 1 request/s |
+| 502 | `PROVIDER_ERROR`, `PROVIDER_HTTP_ERROR`, `PROVIDER_BAD_RESPONSE` | external provider failed |
+| 503 | `DEM_BACKEND_UNAVAILABLE` | GDAL/rasterio not installed |
+| 504 | `PROVIDER_TIMEOUT` | external provider timeout |
 
 ## Coordinates
 
-Point fields: `lon_east_deg` (−180…360 accepted, stored −180…180, east-positive),
-`lat_deg` (−90…90), `crs` (default `urn:ogc:def:crs:EPSG::104905`; must resolve to a Mars
-CRS), `latitude_convention` (`PLANETOCENTRIC` | `PLANETOGRAPHIC` |
-`AS_DECLARED_BY_SOURCE` (default) | `UNKNOWN`). See [COORDINATE_SYSTEM.md](COORDINATE_SYSTEM.md).
+Point fields: `lon_east_deg` (−180…360 accepted, stored −180…180, east-positive), `lat_deg`,
+`crs`, `latitude_convention` (`PLANETOCENTRIC` | `PLANETOGRAPHIC` | `AS_DECLARED_BY_SOURCE` | `UNKNOWN`),
+and for queries `planet` (`MARS` default, `EARTH`, `MOON`, `MERCURY`, `VENUS`). A CRS is only
+accepted for its own body (e.g. `EPSG:4326` is rejected for Mars). See COORDINATE_SYSTEM.md.
 
 ---
 
 ## Health
 
-`GET /health/` → 200
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health/` | backend, database, data dir, GDAL status |
+| GET | `/health/sources/` | probes NASA Trek, NASA GIBS, Open-Meteo, NASA POWER (8 s timeout, cached 10 min, `?refresh=1`). Nominatim is `NOT_PROBED` by policy |
 
-```json
-{"status": "ok", "service": "mars-explorer-backend", "version": "0.1.0", "time_utc": "…",
- "database": "ok", "data_dir": {"path": "…\\data\\mars", "exists": true},
- "raster_backend": {"available": true, "backend": "rasterio 1.5.2", "gdal_version": "3.12.2",
-                    "planetary_drivers": ["COG","GTiff","ISIS2","ISIS3","PDS","PDS4","VICAR"], "error": null}}
-```
-503 with `status: "degraded"` if the database is not reachable.
+## Planets
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/planets/` | all bodies with radii, CRS, conventions, datum, projections, conflicts |
+| GET | `/planets/{id}/` | one body + its map layers |
+| GET | `/planets/{id}/layers/` | verified Trek layers of the body (empty for Venus/Earth) |
 
 ## Datasets
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/datasets/` | list (paginated `?limit=&offset=`); re-checks that files exist (→ `MISSING`) |
+| GET | `/datasets/` | local datasets (paginated); re-checks files (→ `MISSING`) |
 | GET | `/datasets/{id}/` | one dataset |
-| GET | `/datasets/{id}/metadata/` | CRS WKT, full GDAL metadata, validation messages, checksum |
-| POST | `/datasets/register/` | validate + register a file already inside `MARS_DATA_DIR` |
+| GET | `/datasets/{id}/metadata/` | CRS WKT, GDAL metadata, statistics, control points, label statements, import steps |
+| GET | `/datasets/catalog/?planet=&type=` | unified catalog (`type` ∈ IMAGERY, DEM, TOPOGRAPHY, WEATHER, GEOLOGY, BATHYMETRY) with status ONLINE_SOURCE / NOT_DOWNLOADED / VALID / INVALID / PARTIAL_COVERAGE / UNAVAILABLE |
+| POST | `/datasets/register/` | register a file already inside `MARS_DATA_DIR` |
 
-`Dataset` fields: `id, name, source, instrument, product_id, data_type, file_path,
-file_exists, driver, width, height, resolution_meters, pixel_size_x, pixel_size_y,
-crs_name, longitude_convention, latitude_convention, vertical_datum, units,
-nodata_value, coverage_bbox, observation_date, download_date, file_size, checksum,
-is_validated, status (AVAILABLE|DOWNLOADING|PROCESSING|VALID|INVALID|MISSING),
-validation_messages, created_at, updated_at`.
-
-`POST /datasets/register/` body:
-
-```json
-{"file_path": "raw/mola/<label>.xml", "name": "mola-megdr", "source": "", "instrument": "",
- "product_id": "", "vertical_datum": "", "units": ""}
-```
-201 `{"dataset": {…}, "warnings": […]}`; 400 path outside data dir (`PATH_OUTSIDE_DATA_DIR`);
-422 `DATASET_INVALID` with `details.errors`. Large files: prefer the CLI `import_dem`.
-
-## Missions & waypoints
-
-| Method | Path |
-|---|---|
-| GET, POST | `/missions/` |
-| GET, PATCH, DELETE | `/missions/{id}/` |
-| GET, POST | `/waypoints/` (`?mission=<id>` filter) |
-| GET, PATCH, DELETE | `/waypoints/{id}/` |
-
-Mission: `name` (required, non-blank), `description`, `status`
-(PLANNED|ACTIVE|COMPLETED|ABORTED), `demo_mode` (default true), read-only `waypoints[]`,
-`hazard_count`. Waypoint: `mission`, `name`, `kind` (BASE|CHECKPOINT|LANDING_SITE|POI),
-`order`, `notes` + point fields. PUT is not allowed (405); use PATCH.
-
-## Hazards
-
-| Method | Path |
-|---|---|
-| GET, POST | `/hazards/` (filters `?mission=&hazard_type=&severity=&verification=`) |
-| GET, PATCH, DELETE | `/hazards/{id}/` |
-
-Fields: `title` (required), `hazard_type` (CRATER|STEEP_SLOPE|CLIFF|BOULDER_FIELD|
-SOFT_REGOLITH|DUNE|DUST|OTHER), `severity` (UNKNOWN|LOW|MEDIUM|HIGH), `source`
-(FIELD_OBSERVATION|IMAGERY_INTERPRETATION|DEM_DERIVED|OTHER), `verification`
-(UNVERIFIED default|CONFIRMED|REJECTED), `radius_m` (0…1e6, optional), `description`,
-`reference_layer`, `reported_by`, `observed_at`, `mission` (nullable) + point fields.
+`POST /datasets/register/` body: `{"file_path": "raw/mola/x.xml", "name": "slug", "planet": "MARS", "source": "", "instrument": "", "product_id": "", "vertical_datum": "", "units": ""}`.
+Checks: path inside the data dir, extension (`.tif .tiff .img .xml .lbl .cub .vrt`), content
+signature, size limit, then the full validation (CRS for the planet, units, vertical datum,
+valid values, radius guard, control points). 201 → `{dataset, warnings, steps}`; 422 →
+`DATASET_INVALID` with `details.errors` and `details.steps`.
 
 ## Terrain
 
-Query parameters for all three: `lon`, `lat`, optional `crs`, optional
-`lat_convention` (PLANETOCENTRIC | PLANETOGRAPHIC). Without `lat_convention` the
-latitude is used unchanged and `latitude_handling.status = NOT_VERIFIED` with a warning.
+All point endpoints take `lon`, `lat`, optional `crs`, `planet`, `lat_convention`,
+`dataset` (force one dataset). Values come only from a validated DEM of that body.
 
-`GET /terrain/coverage/` → 200
+| Method | Path | Result |
+|---|---|---|
+| GET | `/terrain/coverage/` | `terrain_analysis_status` AVAILABLE / NO DATA / ERROR + covering datasets |
+| GET | `/terrain/sample/` | elevation (nearest cell) — v0.1 shape + `results[]` |
+| GET | `/terrain/elevation/` | elevation in the uniform result schema |
+| GET | `/terrain/slope/` | slope, aspect, TRI, nodata fraction (v0.1 shape + `results[]`) |
+| GET | `/terrain/aspect/` | aspect (degrees clockwise from north, downslope direction) |
+| GET | `/terrain/roughness/` | Terrain Ruggedness Index (Riley et al. 1999), metres |
+| GET | `/terrain/relief/?radius=` | local relief max−min in a (2r+1)² window (r 1–10, default 2) |
+| GET | `/terrain/nodata/?radius=` | nodata coverage fraction in the window |
+| GET | `/terrain/difference/?lon=&lat=&lon2=&lat2=` | elevation B − A (same dataset) |
+| GET | `/terrain/area/?dataset=&bbox=w,s,e,n` | statistics in a bbox (windowed, decimated read) |
+| GET | `/terrain/render/?dataset=&product=&bbox=&width=&height=` | **PNG visualization** (`elevation`, `hillshade`, `slope`, `aspect`, `roughness`), max 1024 px; headers `X-Value-Min/Max/Units`, `X-Valid-Fraction`, `X-Visualization` |
+
+Uniform result schema (`result` / `results[]`):
 
 ```json
-{"query": {…, "crs_resolution": {"resolved_as": "ESRI:104905", "note": "…"}},
- "terrain_analysis_status": "AVAILABLE | NO DATA | ERROR",
- "raster_backend": {…}, "datasets": [{"id": 1, "name": "…", "resolution_meters": …, …}]}
+{"metric": "slope", "value": 1.13, "units": "degrees", "dataset_id": 1, "dataset": "mola-global",
+ "source": "NASA PDS …", "resolution_m": 14817.8, "crs": "Equirectangular Mars",
+ "vertical_datum": "MOLA areoid (GMM3 (mgm1025))", "nodata_status": "OK | PARTIAL_NODATA | NODATA",
+ "processing_method": "Horn (1981) …", "window": "3x3 cells"}
 ```
 
-`GET /terrain/sample/` → 200
-
-```json
-{"status": "AVAILABLE | NODATA", "elevation_m": 1037.0, "elevation_display": null,
- "units": "m", "vertical_datum": "…", "method": "nearest DEM cell, no interpolation",
- "pixel": {"row": 0, "col": 0, "x_dataset": 0, "y_dataset": 0},
- "latitude_handling": {"status": "NONE | CONVERTED_… | NOT_VERIFIED", "lat_query_deg": …, "lat_used_deg": …, "warning": null},
- "dataset": {…}, "query": {…}}
-```
-NODATA cell → `elevation_m: null`, `elevation_display: "DATA NOT AVAILABLE"`.
-404 `DEM_NOT_AVAILABLE` when no DEM covers the point; 503 when GDAL is missing.
-(1037.0 is a value from the synthetic test raster in `backend/tests`, not a Mars measurement.)
-
-`GET /terrain/slope/` → 200: `slope_deg`, `aspect_deg` (clockwise from north, downslope
-direction; null on flat ground), `terrain_ruggedness_index_m`, `elevation_std_m`,
-`nodata_fraction`, `cell_size_m {dx, dy, method}`, `method`, `disclaimer`, `dataset`.
-`status: NODATA` (metrics null) if any of the 3×3 cells is nodata.
+`value` is `null` (never 0) when the data do not allow the computation.
 
 ## Routing
 
-`POST /routes/plan/` body `{"start": {point}, "end": {point}, "max_slope_deg"?, "mission"?}`
-→ input validated (400 on error), then **501 `NOT_IMPLEMENTED`**. No route is ever
-returned or called safe.
+| Method | Path | Description |
+|---|---|---|
+| POST | `/routes/plan/` | A* route |
+| GET | `/routes/` | saved routes (summary; `?mission=`) |
+| GET | `/routes/profiles/` | CONSERVATIVE / STANDARD parameters + disclaimer |
+| GET / DELETE | `/routes/{id}/` | saved route |
+
+Request: `{"start": point, "end": point, "waypoints": [point…≤20], "profile": "CONSERVATIVE"|"STANDARD", "include_return": true, "include_alternative": true, "max_slope_deg"?, "mission"?, "dataset"?}`.
+201 → `{id, status: "ROUTE_FOUND", route, return_route, alternative_route, grid, profile, dataset, hazards_considered, disclaimer}`.
+`route` = `{geometry (LineString), distance_m, distance_3d_m, total_ascent_m, total_descent_m, max_step_grade_deg, unknown_terrain_fraction, unknown_terrain_distance_m, elevation_profile[]}`.
+Failure 422 → `{"status": "INSUFFICIENT_TERRAIN_DATA" | "NO_PASSABLE_ROUTE", "route": null, "reason": "…"}`.
+
+## Missions, waypoints, hazards (sync-aware)
+
+| Method | Path |
+|---|---|
+| GET, POST | `/missions/`, `/waypoints/` (`?mission=`), `/hazards/` (`?mission=&hazard_type=&severity=&verification=`) |
+| GET, PATCH, DELETE | `/missions/{id}/`, `/waypoints/{id}/`, `/hazards/{id}/` |
+
+Missions and hazards carry `client_id` (UUID) and `version`. A POST with an existing
+`client_id` returns the existing record (200, `"replayed": true`). A PATCH with a stale
+`version` returns 409 `CONFLICT` with `details.server`; on success `version` increments.
+PATCH without `version` keeps v0.1 behaviour. PUT is not allowed.
+
+## Earth
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/earth/gibs/layers/` | curated GIBS layers checked against the live EPSG:3857 GetCapabilities (24 h cache, `?refresh=1`): template, TileMatrixSet, max zoom, pixel size, format, TIME intervals, latest date, status |
+| GET | `/geocoding/search/?q=` | Nominatim proxy (2–200 chars, 1 req/s, cached 24 h, explicit searches only) |
+| GET | `/weather/current/?lat=&lon=` | Open-Meteo current conditions (`data_type: forecast_model`) |
+| GET | `/weather/forecast/?lat=&lon=` | hourly (168 h) + daily (7 d) |
+| GET | `/weather/historical/?lat=&lon=&start=&end=` | NASA POWER daily T2M, RH2M, PRECTOTCORR, WS10M (1981-01-01 … today, ≤ 366 days) |
+| GET | `/weather/status/` | cache counts, last success, endpoints, provider terms |
+
+Weather envelope: `{provider, data_type, coordinates, valid_time, retrieved_at, cache_age_s, from_cache, timezone, units, data, attribution, model_grid_cell?, missing_variables, note}`.

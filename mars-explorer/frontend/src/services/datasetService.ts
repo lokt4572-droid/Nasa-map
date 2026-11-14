@@ -35,7 +35,8 @@ const pointQuery = (lon: number, lat: number, planet: PlanetId) => ({
   lon,
   lat,
   planet,
-  crs: PLANETS[planet].mapCrs ?? (planet === "EARTH" ? "EPSG:4326" : TREK_DECLARED_CRS),
+  // Earth points are geographic WGS84 degrees, not the Web Mercator map CRS.
+  crs: planet === "EARTH" ? "EPSG:4326" : (PLANETS[planet].mapCrs ?? TREK_DECLARED_CRS),
 });
 export const getCoverage = (lon: number, lat: number, signal?: AbortSignal, planet: PlanetId = "MARS") =>
   apiRequest<CoverageResponse>("/terrain/coverage/", { query: pointQuery(lon, lat, planet), signal });

@@ -9,6 +9,9 @@ api_v1 = [
     path("", include("apps.hazards.urls")),
     path("terrain/", include("apps.terrain.urls")),
     path("routes/", include("apps.routing.urls")),
+    path("weather/", include("apps.weather.urls")),
+    path("geocoding/", include("apps.geocoding.urls")),
+    path("earth/", include("apps.earth.urls")),
 ]
 
 urlpatterns = [

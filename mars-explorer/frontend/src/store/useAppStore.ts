@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { ALL_LAYERS, layersForPlanet } from "../config/mapLayers";
+import type { GibsDiscovery } from "../services/earthService";
 import { DEFAULT_PLANET, type PlanetId } from "../config/planetRegistry";
 import type { TileGridInfo, TileStats } from "../services/marsMapService";
 import type {
@@ -30,7 +31,20 @@ export interface LayerRuntimeState {
   attempt: number;
 }
 
-export type SidebarSection = "layers" | "terrain" | "science" | "missions" | "routes" | "hazards" | "data";
+export type SidebarSection =
+  | "layers" | "terrain" | "science" | "missions" | "routes" | "hazards" | "data"
+  | "e-layers" | "e-sat" | "e-weather" | "e-location" | "e-terrain" | "e-3d";
+
+export interface EarthState {
+  gibs: Remote<GibsDiscovery>;
+  base: string; // "OSM" or a GIBS SATELLITE layer id
+  overlays: string[]; // GIBS overlay ids, bottom -> top
+  dates: Record<string, string>; // selected YYYY-MM-DD per time-enabled layer
+  overlayOpacity: number;
+  measure: { active: boolean; points: [number, number][] };
+  view: "2D" | "3D";
+  flyTo: { lon: number; lat: number; zoom?: number; bbox?: [number, number, number, number]; seq: number } | null;
+}
 
 export type TerrainProduct = "elevation" | "hillshade" | "slope" | "aspect" | "roughness";
 
@@ -90,6 +104,7 @@ interface AppState {
   terrainOverlay: TerrainOverlayState;
   routeDraft: RouteDraft;
   routeResult: Remote<RoutePlanResponse>;
+  earth: EarthState;
 
   setLayerVisible: (id: string, visible: boolean) => void;
   setLayerOpacity: (id: string, opacity: number) => void;
@@ -111,6 +126,8 @@ interface AppState {
   setTerrainOverlay: (patch: Partial<TerrainOverlayState>) => void;
   setRouteDraft: (patch: Partial<RouteDraft>) => void;
   setRouteResult: (r: Remote<RoutePlanResponse>) => void;
+  setEarth: (patch: Partial<EarthState>) => void;
+  flyTo: (target: { lon: number; lat: number; zoom?: number; bbox?: [number, number, number, number] }) => void;
 }
 
 function initialLayers(): Record<string, LayerRuntimeState> {
@@ -181,6 +198,16 @@ export const useAppStore = create<AppState>((set) => ({
   terrainOverlay: { product: null, opacity: 0.75, status: "idle", error: null, meta: null },
   routeDraft: { start: null, end: null, waypoints: [], profile: "CONSERVATIVE" },
   routeResult: idle(),
+  earth: {
+    gibs: idle(),
+    base: "OSM",
+    overlays: [],
+    dates: {},
+    overlayOpacity: 0.8,
+    measure: { active: false, points: [] },
+    view: "2D",
+    flyTo: null,
+  },
 
   setLayerVisible: (id, visible) =>
     set((s) => ({
@@ -208,7 +235,7 @@ export const useAppStore = create<AppState>((set) => ({
             selectedPoint: null,
             pointInfo: emptyPointInfo(),
             cursor: null,
-            section: "layers",
+            section: planet === "EARTH" ? "e-layers" : "layers",
             terrainOverlay: { ...s.terrainOverlay, product: null, meta: null, status: "idle" },
           },
     ),
@@ -231,4 +258,6 @@ export const useAppStore = create<AppState>((set) => ({
   setTerrainOverlay: (patch) => set((s) => ({ terrainOverlay: { ...s.terrainOverlay, ...patch } })),
   setRouteDraft: (patch) => set((s) => ({ routeDraft: { ...s.routeDraft, ...patch } })),
   setRouteResult: (routeResult) => set({ routeResult }),
+  setEarth: (patch) => set((s) => ({ earth: { ...s.earth, ...patch } })),
+  flyTo: (target) => set((s) => ({ earth: { ...s.earth, flyTo: { ...target, seq: (s.earth.flyTo?.seq ?? 0) + 1 } } })),
 }));

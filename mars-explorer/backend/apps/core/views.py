@@ -28,3 +28,11 @@ def health(request):
         },
         status=200 if db_ok else 503,
     )
+
+
+@api_view(["GET"])
+def health_sources(request):
+    """External service availability (cached 10 min; ?refresh=1 forces a new probe)."""
+    from services.source_health import check_sources
+
+    return Response(check_sources(force=request.query_params.get("refresh") == "1"))

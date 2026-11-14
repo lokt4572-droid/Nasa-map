@@ -50,6 +50,9 @@ INSTALLED_APPS = [
     "apps.terrain",
     "apps.routing",
     "apps.planets",
+    "apps.weather",
+    "apps.geocoding",
+    "apps.earth",
 ]
 
 MIDDLEWARE = [
@@ -147,3 +150,10 @@ LOGGING = {
         "mars": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
     },
 }
+
+# --- External providers (v0.2). All overridable via environment variables.
+HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "MARS-EXPLORER/0.2 (planetary GIS prototype; local)")
+NOMINATIM_URL = os.environ.get("NOMINATIM_URL", "https://nominatim.openstreetmap.org/search")
+OPEN_METEO_URL = os.environ.get("OPEN_METEO_URL", "https://api.open-meteo.com/v1/forecast")
+NASA_POWER_URL = os.environ.get("NASA_POWER_URL", "https://power.larc.nasa.gov/api/temporal/daily/point")
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "mars-explorer"}}

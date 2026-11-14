@@ -12,6 +12,7 @@
   },
   "type": "module",
   "dependencies": {
+    "cesium": "^1.147.0",
     "ol": "^10.11.0",
     "proj4": "^2.22.0",
     "react": "^19.3.1",
@@ -26,6 +27,7 @@
     "jsdom": "^31.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
+    "vite-plugin-static-copy": "^4.1.1",
     "vitest": "^5.1.0"
   },
   "private": true

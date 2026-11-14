@@ -248,3 +248,15 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .planet-btn--active { background: var(--accent); border-color: var(--accent); color: #1a0f0a; font-weight: 700; }
 .planet-btn--exp:not(.planet-btn--active) { border-style: dashed; }
 .planet-screen { position: absolute; inset: 0; overflow-y: auto; padding: 24px; max-width: 760px; }
+
+/* ---------- Earth mode (v0.2) ---------- */
+.tabs { display: flex; gap: 2px; margin: 8px 0; flex-wrap: wrap; }
+.tab { background: none; border: 1px solid var(--line-strong); color: var(--text-dim); padding: 4px 8px; font: inherit; font-size: 11px; letter-spacing: .06em; cursor: pointer; border-radius: var(--radius); }
+.tab--active { background: var(--accent); color: #1a0f0a; border-color: var(--accent); font-weight: 700; }
+.date-control input[type="date"] { flex: 1; }
+.globe-target { background: #000; }
+.globe-banner { position: absolute; left: 50%; transform: translateX(-50%); top: 8px; z-index: 12; max-width: 70%; padding: 6px 10px; font-size: 11.5px;
+  background: rgba(24,27,31,.92); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.globe-banner--warn { border-color: var(--warn); color: var(--warn); }
+.globe-tools { position: absolute; left: 10px; bottom: 40px; z-index: 12; display: flex; flex-direction: column; gap: 4px; }
+.ol-attribution { font-size: 11px; }

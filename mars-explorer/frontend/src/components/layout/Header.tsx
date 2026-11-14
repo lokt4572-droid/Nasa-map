@@ -1,5 +1,7 @@
 import { getLayerConfig } from "../../config/mapLayers";
 import PlanetSwitcher from "./PlanetSwitcher";
+import { useEffect, useState } from "react";
+import { onServiceWorkerStatus, serviceWorkerStatus } from "../../offline/serviceWorker";
 import { formatLat, formatLon } from "../../config/marsProjection";
 import { useOnlineStatus } from "../../hooks/useBackendData";
 import { API_BASE_URL } from "../../services/api";
@@ -15,6 +17,8 @@ export default function Header() {
   const settings = useAppStore((s) => s.settings);
   const setSettings = useAppStore((s) => s.setSettings);
   const online = useOnlineStatus();
+  const [sw, setSw] = useState(serviceWorkerStatus());
+  useEffect(() => onServiceWorkerStatus(setSw), []);
   const mission = missions?.find((m) => m.id === activeMissionId);
 
   const backendLabel = backend.status === "online" ? "API ONLINE" : backend.status === "offline" ? "API OFFLINE" : "API …";
@@ -47,6 +51,10 @@ export default function Header() {
       <div className="header__item header__item--keep" title={backend.error ?? `Backend: ${API_BASE_URL}`}>
         <span className={`dot ${backend.status === "online" ? "dot--ok" : backend.status === "offline" ? "dot--err" : "dot--unk"}`} />
         <span>{backendLabel}</span>
+      </div>
+      <div className="header__item" title={`Service worker: ${sw}. App shell may be cached; map tiles and live data still need the network.`}>
+        <span className="dot dot--unk" />
+        <span>OFFLINE READY: NO</span>
       </div>
       <div className="header__item" title="No astronaut positioning hardware is connected">
         <span className="dot dot--unk" />

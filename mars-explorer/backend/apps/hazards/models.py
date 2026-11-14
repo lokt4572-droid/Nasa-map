@@ -1,9 +1,10 @@
 from django.db import models
 
 from apps.core.models import MarsPoint
+from apps.core.sync import SyncFields
 
 
-class Hazard(MarsPoint):
+class Hazard(MarsPoint, SyncFields):
     """A reported obstacle or potentially hazardous area.
 
     A report is an observation, not a validated safety assessment. ``verification``

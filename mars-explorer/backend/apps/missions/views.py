@@ -1,10 +1,12 @@
 from rest_framework import viewsets
 
+from apps.core.sync import SyncViewSetMixin
+
 from .models import Mission, Waypoint
 from .serializers import MissionSerializer, WaypointSerializer
 
 
-class MissionViewSet(viewsets.ModelViewSet):
+class MissionViewSet(SyncViewSetMixin, viewsets.ModelViewSet):
     queryset = Mission.objects.prefetch_related("waypoints").all()
     serializer_class = MissionSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]

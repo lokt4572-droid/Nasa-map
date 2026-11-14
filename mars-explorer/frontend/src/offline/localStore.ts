@@ -8,7 +8,7 @@
 import type { MissionPackage } from "./missionPackage";
 
 const DB_NAME = "mars-explorer";
-const DB_VERSION = 1;
+const DB_VERSION = 2; // v2 (v0.2): adds syncRecords; v1 stores are kept
 
 export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -18,13 +18,14 @@ export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("missionPackages")) db.createObjectStore("missionPackages", { keyPath: "missionId" });
       if (!db.objectStoreNames.contains("pendingHazards")) db.createObjectStore("pendingHazards", { autoIncrement: true });
       if (!db.objectStoreNames.contains("routes")) db.createObjectStore("routes", { autoIncrement: true });
+      if (!db.objectStoreNames.contains("syncRecords")) db.createObjectStore("syncRecords", { keyPath: "client_id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error("IndexedDB open failed"));
   });
 }
 
-function tx<T>(db: IDBDatabase, store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+export function tx<T>(db: IDBDatabase, store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = db.transaction(store, mode);
     const req = fn(t.objectStore(store));

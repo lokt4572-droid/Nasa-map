@@ -157,3 +157,6 @@ NOMINATIM_URL = os.environ.get("NOMINATIM_URL", "https://nominatim.openstreetmap
 OPEN_METEO_URL = os.environ.get("OPEN_METEO_URL", "https://api.open-meteo.com/v1/forecast")
 NASA_POWER_URL = os.environ.get("NASA_POWER_URL", "https://power.larc.nasa.gov/api/temporal/daily/point")
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "mars-explorer"}}
+
+# Files registered through the browser/API must be small; big DEMs go through the CLI.
+MAX_REGISTER_FILE_BYTES = int(os.environ.get("MAX_REGISTER_FILE_BYTES", str(500 * 1024 * 1024)))

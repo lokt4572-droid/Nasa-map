@@ -5,8 +5,10 @@ import "ol/ol.css";
 import "./styles/app.css";
 import App from "./App";
 import { registerPlanetProjections } from "./config/planetProjections";
+import { registerServiceWorker } from "./offline/serviceWorker";
 
 registerPlanetProjections();
+registerServiceWorker();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root element missing");

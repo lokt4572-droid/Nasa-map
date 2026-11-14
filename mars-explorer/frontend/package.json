@@ -13,6 +13,7 @@
   "type": "module",
   "dependencies": {
     "cesium": "^1.147.0",
+    "fflate": "^0.8.3",
     "ol": "^10.11.0",
     "proj4": "^2.22.0",
     "react": "^19.3.1",

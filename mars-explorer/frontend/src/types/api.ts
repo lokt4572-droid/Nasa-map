@@ -163,6 +163,8 @@ export interface Mission {
   demo_mode: boolean;
   waypoints: Waypoint[];
   hazard_count: number;
+  client_id?: string | null;
+  version?: number;
   created_at: string;
   updated_at: string;
 }
@@ -193,6 +195,8 @@ export interface Hazard extends MarsPointFields {
   reference_layer: string;
   reported_by: string;
   observed_at: string | null;
+  client_id?: string | null;
+  version?: number;
   created_at: string;
   updated_at: string;
 }

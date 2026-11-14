@@ -3,7 +3,8 @@ import { type FormEvent, useState } from "react";
 import { getLayerConfig } from "../../config/mapLayers";
 import { formatLat, formatLon } from "../../config/marsProjection";
 import { useRefreshers } from "../../hooks/useBackendData";
-import { describeError, fieldErrors } from "../../services/api";
+import { ApiError, describeError, fieldErrors } from "../../services/api";
+import { newClientId, queueCreate } from "../../offline/syncQueue";
 import { createHazard, deleteHazard, updateHazard } from "../../services/datasetService";
 import { mapController } from "../../services/marsMapService";
 import { useAppStore } from "../../store/useAppStore";
@@ -28,7 +29,6 @@ export default function HazardPanel() {
   const hazards = useAppStore((s) => s.hazards);
   const point = useAppStore((s) => s.selectedPoint);
   const activeMissionId = useAppStore((s) => s.activeMissionId);
-  const backendOnline = useAppStore((s) => s.backend.status === "online");
   const { refreshHazards, refreshMissions } = useRefreshers();
   const [form, setForm] = useState(emptyForm);
   const [msg, setMsg] = useState<{ ok?: string; err?: string[] }>({});
@@ -37,27 +37,36 @@ export default function HazardPanel() {
     e.preventDefault();
     if (!point) return;
     setMsg({});
+    const body = {
+      title: form.title,
+      hazard_type: form.hazard_type,
+      severity: form.severity,
+      source: form.source,
+      radius_m: form.radius_m === "" ? null : Number(form.radius_m),
+      description: form.description,
+      reported_by: form.reported_by,
+      reference_layer: getLayerConfig(point.layerId).layerId,
+      mission: activeMissionId,
+      lon_east_deg: point.lon,
+      lat_deg: point.lat,
+      crs: point.crs,
+      latitude_convention: "AS_DECLARED_BY_SOURCE",
+      client_id: newClientId(), // makes a later offline replay idempotent
+    };
     try {
-      await createHazard({
-        title: form.title,
-        hazard_type: form.hazard_type,
-        severity: form.severity,
-        source: form.source,
-        radius_m: form.radius_m === "" ? null : Number(form.radius_m),
-        description: form.description,
-        reported_by: form.reported_by,
-        reference_layer: getLayerConfig(point.layerId).layerId,
-        mission: activeMissionId,
-        lon_east_deg: point.lon,
-        lat_deg: point.lat,
-        crs: point.crs,
-        latitude_convention: "AS_DECLARED_BY_SOURCE",
-      });
+      await createHazard(body);
       setForm(emptyForm);
       setMsg({ ok: "Hazard report saved (status: UNVERIFIED)" });
       await refreshHazards();
       if (activeMissionId) await refreshMissions();
     } catch (err) {
+      if (err instanceof ApiError && err.isNetworkError) {
+        // Server unreachable: keep the report on this device (PENDING) instead of losing it.
+        await queueCreate("hazard", body);
+        setForm(emptyForm);
+        setMsg({ ok: "Server unreachable — report saved on this device (PENDING). Use Missions → Offline data → Sync now later." });
+        return;
+      }
       setMsg({ err: [describeError(err), ...fieldErrors(err)] });
     }
   };
@@ -108,7 +117,7 @@ export default function HazardPanel() {
         </div>
         <textarea rows={2} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
         <input placeholder="Reported by" value={form.reported_by} onChange={(e) => setForm({ ...form, reported_by: e.target.value })} />
-        <button className="btn" disabled={!point || !backendOnline}>
+        <button className="btn" disabled={!point}>
           Save hazard report
         </button>
       </form>

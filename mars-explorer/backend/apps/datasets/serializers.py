@@ -28,6 +28,7 @@ class DatasetRegisterSerializer(serializers.Serializer):
 
     file_path = serializers.CharField(max_length=1024, help_text="Path relative to MARS_DATA_DIR, e.g. raw/mola/file.xml")
     name = serializers.SlugField(max_length=120)
+    planet = serializers.ChoiceField(choices=["MARS", "EARTH", "MOON", "MERCURY", "VENUS"], default="MARS")
     source = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     instrument = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
     product_id = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")

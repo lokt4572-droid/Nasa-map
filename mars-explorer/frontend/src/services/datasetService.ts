@@ -22,12 +22,13 @@ export const listDatasets = () => apiRequest<Paginated<Dataset>>("/datasets/");
 export const registerDataset = (body: {
   file_path: string;
   name: string;
+  planet?: string;
   source?: string;
   instrument?: string;
   product_id?: string;
   vertical_datum?: string;
   units?: string;
-}) => apiRequest<{ dataset: Dataset; warnings: string[] }>("/datasets/register/", { method: "POST", body, timeoutMs: 600_000 });
+}) => apiRequest<{ dataset: Dataset; warnings: string[]; steps: ImportStep[] }>("/datasets/register/", { method: "POST", body, timeoutMs: 600_000 });
 
 // --- terrain (point given in the map's declared CRS; latitude type not asserted)
 // Points are sent in the CRS of the body's map (as declared by its map service).
@@ -130,3 +131,30 @@ export async function fetchTerrainRender(
     dataset: res.headers.get("X-Dataset") ?? "",
   };
 }
+
+// --- unified catalog (v0.2)
+export interface CatalogEntry {
+  key: string;
+  planet: string;
+  dataset: string;
+  source: string;
+  instrument: string;
+  product_id: string;
+  data_type: string;
+  resolution: string;
+  spatial_coverage: string;
+  temporal_coverage: string;
+  crs: string;
+  units: string;
+  vertical_datum: string;
+  license: string;
+  access: "ONLINE" | "DOWNLOAD";
+  url: string;
+  purpose: string;
+  facts: string;
+  status: string;
+  local_datasets: { id: number; name: string; status: string }[];
+}
+export const getCatalog = (planet?: string, type?: string) =>
+  apiRequest<{ types: string[]; results: CatalogEntry[] }>("/datasets/catalog/", { query: { planet, type } });
+export type ImportStep = { step: string; status: string; detail: string };

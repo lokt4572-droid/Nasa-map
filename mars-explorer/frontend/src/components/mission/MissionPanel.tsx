@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react";
 
 import { formatLat, formatLon } from "../../config/marsProjection";
 import { useRefreshers } from "../../hooks/useBackendData";
+import OfflinePanel from "./OfflinePanel";
 import { buildMissionPackage, downloadJson } from "../../offline/missionPackage";
 import { saveMissionPackage } from "../../offline/localStore";
 import { describeError } from "../../services/api";
@@ -170,6 +171,8 @@ export default function MissionPanel() {
           </div>
         </div>
       )}
+
+      <OfflinePanel />
 
       <h4 className="subhead">New mission</h4>
       <form className="form" onSubmit={onCreate}>

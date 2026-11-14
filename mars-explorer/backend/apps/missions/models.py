@@ -1,9 +1,10 @@
 from django.db import models
 
 from apps.core.models import MarsPoint
+from apps.core.sync import SyncFields
 
 
-class Mission(models.Model):
+class Mission(SyncFields):
     class Status(models.TextChoices):
         PLANNED = "PLANNED", "Planned"
         ACTIVE = "ACTIVE", "Active"

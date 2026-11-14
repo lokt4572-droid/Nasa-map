@@ -260,3 +260,11 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .globe-banner--warn { border-color: var(--warn); color: var(--warn); }
 .globe-tools { position: absolute; left: 10px; bottom: 40px; z-index: 12; display: flex; flex-direction: column; gap: 4px; }
 .ol-attribution { font-size: 11px; }
+
+/* ---------- data manager workflow (v0.2) ---------- */
+.workflow { list-style: none; padding: 0; margin: 4px 0 8px; display: flex; flex-wrap: wrap; gap: 3px; }
+.wf { font-size: 10px; font-family: var(--mono); padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--text-faint); }
+.wf--ok { color: var(--ok); border-color: var(--ok); }
+.wf--warning { color: var(--warn); border-color: var(--warn); }
+.wf--error { color: var(--err); border-color: var(--err); }
+.wf--skipped { text-decoration: line-through; }

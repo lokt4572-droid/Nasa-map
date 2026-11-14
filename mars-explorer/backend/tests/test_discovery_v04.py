@@ -105,10 +105,11 @@ class StacClientTests(SimpleTestCase):
         from services import http_client
 
         cache.clear()
-        with mock.patch.object(http_client, "get_json", side_effect=http_client.ProviderTimeout("x", "slow")):
+        with mock.patch.object(http_client, "get_json", side_effect=http_client.ProviderTimeout("x", "slow")) as m:
             with self.assertRaises(stac_client.StacError) as ctx:
                 stac_client.search("MARS", point=(1, 1))
         self.assertEqual(ctx.exception.code, "PROVIDER_TIMEOUT")
+        self.assertEqual(m.call_count, 2)  # one retry, then a typed error (no endless loop)
         with mock.patch.object(http_client, "get_json", return_value=["not", "a", "catalogue"]):
             with self.assertRaises(stac_client.StacError):
                 stac_client.search("MARS", point=(2, 2))

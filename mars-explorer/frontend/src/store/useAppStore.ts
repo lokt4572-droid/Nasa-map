@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { textureFor } from "../config/planetTextures";
 
 import { ALL_LAYERS, layersForPlanet } from "../config/mapLayers";
+import type { DemProduct } from "../services/datasetDiscoveryService";
 import type { GibsDiscovery } from "../services/earthService";
 import { DEFAULT_PLANET, type PlanetId } from "../config/planetRegistry";
 import type { TileGridInfo, TileStats } from "../services/marsMapService";
@@ -115,6 +116,12 @@ interface AppState {
   /** MAP = 2D map (or Earth's own 2D/Cesium views), GLOBE = Three.js textured globe */
   bodyView: "MAP" | "GLOBE" | "TILES";
   coverageExplorerOpen: boolean;
+  /** DTM products found by the coverage explorer (footprints drawn on the map). */
+  coverageProducts: DemProduct[];
+  setCoverageProducts: (p: DemProduct[]) => void;
+  /** Catalogue product the user chose for the local 3D terrain ("<collection>/<product_id>"), or null = best available. */
+  terrainProduct: string | null;
+  setTerrainProduct: (p: string | null) => void;
   setCoverageExplorerOpen: (v: boolean) => void;
   setBodyView: (v: "MAP" | "GLOBE" | "TILES") => void;
   /** centre to apply when the 2D map mounts (e.g. "Open in 2D map" from the globe) */
@@ -229,6 +236,10 @@ export const useAppStore = create<AppState>((set) => ({
   bodyView: "MAP",
   setBodyView: (bodyView) => set({ bodyView }),
   coverageExplorerOpen: false,
+  coverageProducts: [],
+  setCoverageProducts: (coverageProducts) => set({ coverageProducts }),
+  terrainProduct: null,
+  setTerrainProduct: (terrainProduct) => set({ terrainProduct }),
   setCoverageExplorerOpen: (coverageExplorerOpen) => set({ coverageExplorerOpen }),
   pendingMapCenter: null,
   setPendingMapCenter: (pendingMapCenter) => set({ pendingMapCenter }),
@@ -273,6 +284,8 @@ export const useAppStore = create<AppState>((set) => ({
                   ? "GLOBE"
                   : "MAP",
             pendingMapCenter: null,
+            coverageProducts: [],
+            terrainProduct: null,
             activeLayerId: defaultLayerFor(planet),
             selectedPoint: null,
             pointInfo: emptyPointInfo(),
@@ -284,7 +297,8 @@ export const useAppStore = create<AppState>((set) => ({
   setSection: (section) => set({ section }),
   setCursor: (cursor) => set({ cursor }),
   setView: (view) => set({ view }),
-  selectPoint: (selectedPoint) => set({ selectedPoint, pointInfo: emptyPointInfo() }),
+  // A newly selected point starts from the best available DEM, not a previously chosen product.
+  selectPoint: (selectedPoint) => set({ selectedPoint, pointInfo: emptyPointInfo(), terrainProduct: null }),
   setPointInfo: (patch) => set((s) => ({ pointInfo: { ...s.pointInfo, ...patch } })),
   setBackend: (backend) => set({ backend }),
   setMissions: (missions) => set({ missions }),

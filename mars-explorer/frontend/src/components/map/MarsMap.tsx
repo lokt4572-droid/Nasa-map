@@ -22,6 +22,7 @@ import {
 } from "../../services/marsMapService";
 import { autoLayerChanges } from "../../services/adaptiveLayers";
 import { coverageRegions } from "../../services/coverageCatalog";
+import { footprintRings } from "../../services/datasetDiscoveryService";
 import { bufferExtent, type TileLoaderHandle } from "../../services/tileLoader";
 import { useAppStore } from "../../store/useAppStore";
 import type { HazardSeverity } from "../../types/api";
@@ -245,11 +246,25 @@ export default function MarsMap() {
 
   // --- coverage outlines (Coverage Explorer open)
   const coverageOpen = useAppStore((s) => s.coverageExplorerOpen);
+  const coverageProducts = useAppStore((s) => s.coverageProducts);
   useEffect(() => {
     const h = handleRef.current;
     if (!h || !mapReady) return;
     const src = new VectorSource();
     if (coverageOpen) {
+      // Real DTM footprints from the provider catalogue (green = elevation data).
+      for (const p of coverageProducts) {
+        for (const ring of footprintRings(p.footprint)) {
+          const f = new Feature({ geometry: new Polygon([ring]) });
+          f.setStyle(
+            new Style({
+              stroke: new Stroke({ color: "#6fbf73", width: p.level === "LOCAL_HIGH_RESOLUTION" ? 2 : 1.2 }),
+              fill: new Fill({ color: "rgba(111,191,115,0.07)" }),
+            }),
+          );
+          src.addFeature(f);
+        }
+      }
       for (const r of coverageRegions(planet)) {
         for (const l of r.datasets) {
           const b = l.bbox;
@@ -283,7 +298,7 @@ export default function MarsMap() {
     return () => {
       h.map.removeLayer(layer);
     };
-  }, [coverageOpen, mapReady]);
+  }, [coverageOpen, mapReady, coverageProducts]);
 
   // --- hazards
   useEffect(() => {

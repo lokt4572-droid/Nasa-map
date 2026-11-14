@@ -5,12 +5,12 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { formatLat, formatLon } from "../../config/marsProjection";
 import { describeError } from "../../services/api";
 import {
-  DEFAULT_RADIUS_M,
   buildTerrainMesh,
   loadTerrainPatch,
   rampColor,
   type TerrainPatch,
 } from "../../services/localTerrainService";
+import { deviceHints, meshDimensionFor } from "../../services/terrainMeshService";
 import { useAppStore } from "../../store/useAppStore";
 
 type State =
@@ -20,7 +20,9 @@ type State =
   | { status: "error"; message: string }
   | { status: "ready"; patch: TerrainPatch };
 
-const RADII_KM = [10, 20, 50, 100, 200, 500];
+const RADII_KM = [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500];
+/** Vertical exaggeration steps (visualisation only; never used for any calculation). */
+export const EXAGGERATIONS = [1, 1.5, 2, 5];
 const fmtM = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(m >= 10_000 ? 0 : 1)} km` : `${Math.round(m)} m`);
 
 /**
@@ -32,7 +34,9 @@ export default function LocalTerrain3D() {
   const planet = useAppStore((s) => s.planet);
   const point = useAppStore((s) => s.selectedPoint);
   const lonMode = useAppStore((s) => s.settings.lonMode);
-  const [radiusM, setRadiusM] = useState(DEFAULT_RADIUS_M);
+  const [radiusM, setRadiusM] = useState<number | "native">("native");
+  const [datasetId, setDatasetId] = useState<number | null>(null);
+  const product = useAppStore((s) => s.terrainProduct);
   const [exaggeration, setExaggeration] = useState(1);
   const [expanded, setExpanded] = useState(false);
   const [state, setState] = useState<State>({ status: "idle" });
@@ -42,7 +46,14 @@ export default function LocalTerrain3D() {
     if (!point) return setState({ status: "idle" });
     const ctrl = new AbortController();
     setState({ status: "loading" });
-    loadTerrainPatch(planet, point.lon, point.lat, { radiusM, signal: ctrl.signal })
+    loadTerrainPatch(planet, point.lon, point.lat, {
+      radiusM,
+      source: "auto",
+      datasetId: datasetId ?? undefined,
+      product: datasetId ? undefined : (product ?? undefined),
+      maxDimension: meshDimensionFor(deviceHints()),
+      signal: ctrl.signal,
+    })
       .then((r) => {
         if (ctrl.signal.aborted) return;
         setState(r.status === "OK" ? { status: "ready", patch: r.patch } : { status: "unavailable", code: r.code, message: r.message });
@@ -51,7 +62,10 @@ export default function LocalTerrain3D() {
         if (!ctrl.signal.aborted) setState({ status: "error", message: describeError(err) });
       });
     return () => ctrl.abort();
-  }, [planet, point?.lon, point?.lat, radiusM]);
+  }, [planet, point?.lon, point?.lat, radiusM, datasetId, product]);
+
+  // A new point starts again from the best available DEM.
+  useEffect(() => setDatasetId(null), [planet, point?.lon, point?.lat]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -75,13 +89,17 @@ export default function LocalTerrain3D() {
           </button>
         )}
       </div>
-      {state.status === "loading" && <div className="lt3d__msg">Loading DEM patch…</div>}
+      {state.status === "loading" && (
+        <div className="lt3d__msg" role="status">
+          Searching elevation data and reading the DEM window… <span className="muted small">(a first read of a remote DTM can take 10–30 s)</span>
+        </div>
+      )}
       {state.status === "error" && <div className="lt3d__msg error-text">Could not load terrain: {state.message}</div>}
       {state.status === "unavailable" && (
         <div className="lt3d__msg lt3d__unavailable" role="status">
-          <strong>3D TERRAIN UNAVAILABLE</strong>
-          <div>{state.message}</div>
-          <div className="muted small">No elevation model is shown instead: imagery colours are not elevations.</div>
+          <strong>LOCAL 3D TERRAIN UNAVAILABLE</strong>
+          <div>{state.code === "DEM_NOT_AVAILABLE" ? "No validated elevation dataset covers this location." : state.message}</div>
+          <div className="muted small">The available imagery can still be inspected. No elevation model is shown instead: imagery colours are not elevations.</div>
         </div>
       )}
       {state.status === "ready" && (
@@ -93,18 +111,42 @@ export default function LocalTerrain3D() {
             <div className="lt3d__controls">
               <label className="lt3d__ctl" title="Radius of the patch around the point">
                 Radius
-                <select value={radiusM} onChange={(e) => setRadiusM(Number(e.target.value))}>
+                <select value={radiusM} onChange={(e) => setRadiusM(e.target.value === "native" ? "native" : Number(e.target.value))}>
+                  <option value="native">DEM native resolution</option>
                   {RADII_KM.map((r) => (
                     <option key={r} value={r * 1000}>
-                      {r} km
+                      {r < 1 ? `${r * 1000} m` : `${r} km`}
                     </option>
                   ))}
                 </select>
               </label>
-              <label className="lt3d__ctl" title="Visual aid only: stretches heights on screen; values and legend stay true elevations">
-                Vertical exaggeration {exaggeration.toFixed(1)}× <span className="muted">(visual only)</span>
-                <input type="range" min={0.5} max={20} step={0.5} value={exaggeration} onChange={(e) => setExaggeration(Number(e.target.value))} />
-              </label>
+              {(state.patch.alternatives?.length ?? 0) > 0 && (
+                <label className="lt3d__ctl" title="Other validated DEMs covering this point">
+                  DEM
+                  <select value={datasetId ?? state.patch.dataset.id} onChange={(e) => setDatasetId(Number(e.target.value))}>
+                    <option value={state.patch.dataset.id}>
+                      {state.patch.dataset.instrument} · {fmtM(state.patch.dataset.native_resolution_m)}
+                    </option>
+                    {state.patch.alternatives!.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.instrument} · {a.resolution_meters ? fmtM(a.resolution_meters) : "resolution not stated"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <div className="lt3d__ctl" role="group" aria-label="Vertical exaggeration">
+                <span>
+                  VERTICAL EXAGGERATION: {exaggeration.toFixed(1)}x <span className="warn-text">VISUALIZATION ONLY</span>
+                </span>
+                <span className="lt3d__steps">
+                  {EXAGGERATIONS.map((x) => (
+                    <button key={x} className={`btn btn--small ${exaggeration === x ? "" : "btn--ghost"}`} aria-pressed={exaggeration === x} onClick={() => setExaggeration(x)}>
+                      {x.toFixed(1)}x
+                    </button>
+                  ))}
+                </span>
+              </div>
             </div>
           }
         />
@@ -293,6 +335,16 @@ function TerrainScene({
         </dd>
         <dt>Datum</dt>
         <dd>{ds.vertical_datum}</dd>
+        <dt>Accuracy</dt>
+        <dd>{ds.effective_accuracy ?? "NOT_DOCUMENTED"} — post spacing is not accuracy</dd>
+        <dt>Access</dt>
+        <dd>
+          {ds.access === "REMOTE_COG" ? "Remote: window read from the provider's Cloud-Optimized GeoTIFF (nothing downloaded in bulk)" : "Local file"}
+          {ds.quality_status && ds.quality_status !== "NOT_DOCUMENTED" ? ` · provider quality: ${ds.quality_status}` : ""}
+          {patch.selection?.skipped_products?.length ? (
+            <span className="warn-text"> · {patch.selection.skipped_products.length} finer product(s) could not be read and were skipped</span>
+          ) : null}
+        </dd>
         <dt>NoData</dt>
         <dd className={s.nodata_fraction > 0 ? "warn-text" : ""}>
           {(s.nodata_fraction * 100).toFixed(1)}% {s.nodata_fraction > 0 ? `— ${triangles.skipped} triangles left empty` : ""}
@@ -307,7 +359,13 @@ function TerrainScene({
         </dd>
         <dt>Source</dt>
         <dd>
-          {ds.source}
+          {ds.source_url ? (
+            <a href={ds.source_url} target="_blank" rel="noreferrer">
+              {ds.source}
+            </a>
+          ) : (
+            ds.source
+          )}
           {ds.license ? ` · ${ds.license}` : ""}
         </dd>
       </dl>

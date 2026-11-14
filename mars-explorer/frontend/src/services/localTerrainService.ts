@@ -34,7 +34,18 @@ export interface PatchResponse {
     latitude_convention: string;
     vertical_datum: string;
     units: string;
+    /** LOCAL file or REMOTE_COG (window read from the provider) */
+    access?: string;
+    quality_status?: string;
+    source_url?: string | null;
+    effective_accuracy?: string;
   };
+  /** how the DEM was chosen (v0.4) */
+  selection?: { mode: string; reason: string; skipped_products?: { product_id: string; code: string; message: string }[]; provider?: { name: string; status: string; error?: string } };
+  alternatives?: { id: number; name: string; instrument: string; resolution_meters: number | null; access?: string }[];
+  coverage_status?: string;
+  processing_status?: string;
+  sample_spacing_m?: number;
   statistics: { min: number; max: number; mean: number; relief: number; nodata_fraction: number };
   encoding: string;
   elevation: string;
@@ -72,8 +83,8 @@ export function decodeElevation(b64: string, width: number, height: number): Flo
 const cache = new Map<string, PatchResult>();
 const MAX_CACHE = 24;
 
-export function patchKey(planet: string, lon: number, lat: number, radiusM: number, maxDim: number): string {
-  return `${planet}:${lon.toFixed(5)}:${lat.toFixed(5)}:${Math.round(radiusM)}:${maxDim}`;
+export function patchKey(planet: string, lon: number, lat: number, radiusM: number | "native", maxDim: number, variant = ""): string {
+  return `${planet}:${lon.toFixed(5)}:${lat.toFixed(5)}:${radiusM === "native" ? "native" : Math.round(radiusM)}:${maxDim}:${variant}`;
 }
 
 export function clearPatchCache(): void {
@@ -86,19 +97,42 @@ export async function loadTerrainPatch(
   planet: PlanetId,
   lon: number,
   lat: number,
-  opts: { radiusM?: number; maxDimension?: number; signal?: AbortSignal; request?: Request } = {},
+  opts: {
+    /** metres, or "native" = the radius that shows the chosen DEM at its own resolution */
+    radiusM?: number | "native";
+    maxDimension?: number;
+    /** "auto" also uses DTMs from the provider catalogue (remote window reads); "local" = registered files only */
+    source?: "auto" | "local";
+    /** registered dataset id */
+    datasetId?: number;
+    /** catalogue product "<collection>/<product_id>" */
+    product?: string;
+    signal?: AbortSignal;
+    request?: Request;
+  } = {},
 ): Promise<PatchResult> {
   const radius = opts.radiusM ?? DEFAULT_RADIUS_M;
   const maxDim = opts.maxDimension ?? 192;
-  const key = patchKey(planet, lon, lat, radius, maxDim);
+  const source = opts.source ?? "local";
+  const key = patchKey(planet, lon, lat, radius, maxDim, `${source}:${opts.datasetId ?? ""}:${opts.product ?? ""}`);
   const hit = cache.get(key);
   if (hit) return hit;
   const request = opts.request ?? apiRequest;
-  const get = (r: number) =>
+  const get = (r: number | "native") =>
     request<PatchResponse>("/terrain/patch/", {
-      query: { planet, longitude: lon, latitude: lat, radius_m: Math.round(r), max_dimension: maxDim },
+      query: {
+        planet,
+        longitude: lon,
+        latitude: lat,
+        ...(r === "native" ? {} : { radius_m: Math.round(r) }),
+        max_dimension: maxDim,
+        ...(source === "auto" ? { source: "auto" } : {}),
+        ...(opts.datasetId ? { dataset: opts.datasetId } : {}),
+        ...(opts.product ? { product: opts.product } : {}),
+      },
       signal: opts.signal,
-      timeoutMs: 30_000,
+      // A first read of a remote DTM validates the product and fetches blocks from the provider.
+      timeoutMs: source === "auto" || opts.product ? 90_000 : 30_000,
     });
 
   let result: PatchResult;
@@ -111,7 +145,7 @@ export async function loadTerrainPatch(
       const d = err instanceof ApiError ? (err.details as { native_resolution_m?: number } | undefined) : undefined;
       if (err instanceof ApiError && err.code === "DEM_TOO_COARSE_FOR_PATCH" && d?.native_resolution_m) {
         const r2 = Math.min(MAX_RADIUS_M, (TARGET_NATIVE_CELLS * d.native_resolution_m) / 2);
-        if (r2 <= radius) throw err;
+        if (radius === "native" || r2 <= radius) throw err;
         body = await get(r2);
         adjusted = true;
       } else throw err;
@@ -119,7 +153,12 @@ export async function loadTerrainPatch(
     const { elevation, ...rest } = body;
     result = {
       status: "OK",
-      patch: { ...rest, z: decodeElevation(elevation, body.grid.width, body.grid.height), radiusAdjusted: adjusted, requestedRadiusM: radius },
+      patch: {
+        ...rest,
+        z: decodeElevation(elevation, body.grid.width, body.grid.height),
+        radiusAdjusted: adjusted,
+        requestedRadiusM: radius === "native" ? body.radius_m : radius,
+      },
     };
   } catch (err) {
     if (opts.signal?.aborted) throw err;
@@ -136,6 +175,10 @@ export interface TerrainMeshArrays {
   positions: Float32Array;
   colors: Float32Array;
   indices: Uint32Array;
+  /** texture coordinates: u = west->east, v = south->north (for draping imagery) */
+  uvs: Float32Array;
+  /** axis-aligned bounds of the valid vertices in scene units */
+  bounds: { min: [number, number, number]; max: [number, number, number] };
   /** horizontal extent of the scene (metres) used for normalisation */
   sizeM: number;
   validTriangles: number;
@@ -175,6 +218,9 @@ export function buildTerrainMesh(p: Pick<TerrainPatch, "z" | "grid" | "statistic
   const span = max - min || 1;
   const positions = new Float32Array(w * h * 3);
   const colors = new Float32Array(w * h * 3);
+  const uvs = new Float32Array(w * h * 2);
+  const bmin: [number, number, number] = [Infinity, Infinity, Infinity];
+  const bmax: [number, number, number] = [-Infinity, -Infinity, -Infinity];
   for (let r = 0; r < h; r++) {
     for (let c = 0; c < w; c++) {
       const i = r * w + c;
@@ -185,6 +231,15 @@ export function buildTerrainMesh(p: Pick<TerrainPatch, "z" | "grid" | "statistic
       positions[i * 3 + 2] = ((r - (h - 1) / 2) * dy) / sizeM;
       const col = ok ? rampColor((zv - min) / span) : [0, 0, 0];
       colors.set(col, i * 3);
+      uvs[i * 2] = w > 1 ? c / (w - 1) : 0;
+      uvs[i * 2 + 1] = h > 1 ? 1 - r / (h - 1) : 0;
+      if (ok) {
+        for (let k = 0; k < 3; k++) {
+          const v = positions[i * 3 + k]!;
+          if (v < bmin[k]!) bmin[k] = v;
+          if (v > bmax[k]!) bmax[k] = v;
+        }
+      }
     }
   }
   const idx: number[] = [];
@@ -202,5 +257,5 @@ export function buildTerrainMesh(p: Pick<TerrainPatch, "z" | "grid" | "statistic
       else skipped++;
     }
   }
-  return { positions, colors, indices: Uint32Array.from(idx), sizeM, validTriangles: idx.length / 3, skippedTriangles: skipped };
+  return { positions, colors, uvs, bounds: { min: bmin, max: bmax }, indices: Uint32Array.from(idx), sizeM, validTriangles: idx.length / 3, skippedTriangles: skipped };
 }

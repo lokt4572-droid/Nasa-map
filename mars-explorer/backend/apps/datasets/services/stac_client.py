@@ -25,6 +25,7 @@ API_ROOT = "https://stac.astrogeology.usgs.gov/api"
 DOCS_ROOT = "https://stac.astrogeology.usgs.gov/docs/data"
 CACHE_TTL_S = 3600
 MAX_LIMIT = 100
+REQUEST_TIMEOUT_S = 30.0  # measured 2-40 s for one page on 2026-11-15 (provider latency varies widely)
 
 
 @dataclass(frozen=True)
@@ -208,10 +209,16 @@ def _fetch(params: dict) -> dict:
     hit = cache.get(key)
     if hit is not None:
         return hit
-    try:
-        data = http_client.get_json(PROVIDER, f"{API_ROOT}/search", params, timeout=20.0)
-    except http_client.ProviderError as exc:
-        raise StacError(str(exc), exc.code) from exc
+    data = None
+    for attempt in (1, 2):  # the provider is occasionally slow: one retry on a timeout, never more
+        try:
+            data = http_client.get_json(PROVIDER, f"{API_ROOT}/search", params, timeout=REQUEST_TIMEOUT_S)
+            break
+        except http_client.ProviderTimeout as exc:
+            if attempt == 2:
+                raise StacError(str(exc), exc.code) from exc
+        except http_client.ProviderError as exc:
+            raise StacError(str(exc), exc.code) from exc
     if not isinstance(data, dict) or not isinstance(data.get("features"), list):
         raise StacError(f"{PROVIDER} returned an unexpected document", "PROVIDER_BAD_RESPONSE")
     cache.set(key, data, CACHE_TTL_S)
@@ -245,25 +252,28 @@ def search(
         raise ValueError("bbox or point is required")
     products: dict[tuple[str, str], dict] = {}
     matched, truncated = 0, False
-    for coll in colls:
-        for box in boxes:
-            data = _fetch({
-                "collections": coll.id,
-                "bbox": ",".join(f"{v:.6f}" for v in box),
-                "limit": limit,
-            })
-            n = data.get("numberMatched")
-            matched += n if isinstance(n, int) else len(data["features"])
-            truncated = truncated or (isinstance(n, int) and n > len(data["features"]))
-            for item in data["features"]:
-                rec = normalize_item(item)
-                if rec is None:
-                    continue
-                if point is not None and not point_in_footprint(rec["footprint"], point[0], point[1]):
-                    continue
-                if max_resolution_m is not None and (rec["resolution_m"] is None or rec["resolution_m"] > max_resolution_m):
-                    continue
-                products[(rec["dataset_id"], rec["product_id"])] = rec
+    # One request per collection and box, run concurrently: provider latency dominates.
+    jobs = [(coll, {"collections": coll.id, "bbox": ",".join(f"{v:.6f}" for v in box), "limit": limit}) for coll in colls for box in boxes]
+    if len(jobs) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=min(4, len(jobs))) as pool:
+            pages = list(pool.map(lambda j: _fetch(j[1]), jobs))  # the first StacError propagates
+    else:
+        pages = [_fetch(jobs[0][1])]
+    for data in pages:
+        n = data.get("numberMatched")
+        matched += n if isinstance(n, int) else len(data["features"])
+        truncated = truncated or (isinstance(n, int) and n > len(data["features"]))
+        for item in data["features"]:
+            rec = normalize_item(item)
+            if rec is None:
+                continue
+            if point is not None and not point_in_footprint(rec["footprint"], point[0], point[1]):
+                continue
+            if max_resolution_m is not None and (rec["resolution_m"] is None or rec["resolution_m"] > max_resolution_m):
+                continue
+            products[(rec["dataset_id"], rec["product_id"])] = rec
     out = sorted(products.values(), key=lambda r: (r["resolution_m"] is None, r["resolution_m"] or 0.0))
     return {"products": out, "matched": matched, "truncated": truncated, "collections": [c.id for c in colls]}
 

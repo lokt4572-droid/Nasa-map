@@ -1,0 +1,6 @@
+# Optional raster backend for DEM reading (GDAL is bundled inside the rasterio wheel).
+# Kept separate so the Django app installs even when GDAL is a problem on a machine.
+#   pip install -r requirements-raster.txt
+# Verified on Windows 11 / Python 3.14: rasterio 1.5.2 wheel bundles GDAL 3.12.2 with
+# GTiff, COG, PDS, PDS4, ISIS2, ISIS3 and VICAR drivers.
+rasterio>=1.4.3,<2

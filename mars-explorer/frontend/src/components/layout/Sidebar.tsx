@@ -1,0 +1,47 @@
+import { type SidebarSection, useAppStore } from "../../store/useAppStore";
+import DataManager from "../data/DataManager";
+import LayerSelector from "../map/LayerSelector";
+import HazardPanel from "../mission/HazardPanel";
+import MissionPanel from "../mission/MissionPanel";
+import DatasetInfo from "../terrain/DatasetInfo";
+import { TerrainSection } from "../terrain/TerrainInfo";
+
+const SECTIONS: { id: SidebarSection; label: string }[] = [
+  { id: "layers", label: "Map Layers" },
+  { id: "terrain", label: "Terrain" },
+  { id: "science", label: "Scientific Data" },
+  { id: "missions", label: "Missions" },
+  { id: "hazards", label: "Hazards" },
+  { id: "data", label: "Data Manager" },
+];
+
+export default function Sidebar() {
+  const section = useAppStore((s) => s.section);
+  const setSection = useAppStore((s) => s.setSection);
+  return (
+    <aside className="sidebar">
+      <nav className="sidebar__nav" aria-label="Sections">
+        {SECTIONS.map((s, i) => (
+          <button
+            key={s.id}
+            className={`nav-btn ${section === s.id ? "nav-btn--active" : ""}`}
+            onClick={() => setSection(s.id)}
+            aria-current={section === s.id}
+          >
+            <span className="nav-btn__num">{i + 1}</span>
+            {s.label}
+          </button>
+        ))}
+      </nav>
+      <div className="sidebar__body">
+        <h3 className="panel-title">{SECTIONS.find((s) => s.id === section)?.label}</h3>
+        {section === "layers" && <LayerSelector />}
+        {section === "terrain" && <TerrainSection />}
+        {section === "science" && <DatasetInfo />}
+        {section === "missions" && <MissionPanel />}
+        {section === "hazards" && <HazardPanel />}
+        {section === "data" && <DataManager />}
+      </div>
+    </aside>
+  );
+}

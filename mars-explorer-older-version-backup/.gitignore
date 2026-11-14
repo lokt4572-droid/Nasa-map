@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+env/
+
+# Build outputs
+frontend/dist/
+backend/staticfiles/
+backend/media/
+
+# Environment files
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data files (large scientific data)
+data/mars/raw/*
+data/mars/processed/*
+!data/mars/raw/.gitkeep
+!data/mars/processed/.gitkeep
+!data/mars/metadata/.gitkeep
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing
+coverage/
+.htmlcov/

@@ -35,6 +35,10 @@ class Command(BaseCommand):
         parser.add_argument("--instrument", default="", help="e.g. 'MGS MOLA' or 'MRO HiRISE'")
         parser.add_argument("--product-id", default="")
         parser.add_argument("--data-type", default="DEM", choices=["DEM", "SLOPE", "ROUGHNESS", "OTHER"])
+        parser.add_argument("--planet", default="MARS", choices=["MARS", "EARTH", "MOON", "MERCURY", "VENUS"],
+                            help="Body the DEM belongs to; its CRS must match this body (default MARS)")
+        parser.add_argument("--license", default="", help="Licence / terms of use of the product")
+        parser.add_argument("--download-url", default="", help="Official URL the file was downloaded from")
         parser.add_argument("--vertical-datum", default=None, help="As stated in the product label, e.g. 'MOLA areoid'")
         parser.add_argument("--units", default=None, help="Elevation units, only if the file does not state them")
         parser.add_argument(
@@ -67,6 +71,9 @@ class Command(BaseCommand):
                 instrument=opts["instrument"],
                 product_id=opts["product_id"],
                 data_type=opts["data_type"],
+                planet=opts["planet"],
+                license=opts["license"],
+                download_url=opts["download_url"],
                 vertical_datum=opts["vertical_datum"],
                 units=opts["units"],
                 latitude_convention=opts["latitude_convention"],
@@ -80,6 +87,7 @@ class Command(BaseCommand):
         except RasterReadError as exc:
             raise CommandError(f"Unreadable raster: {exc}") from exc
         except dataset_manager.DatasetValidationError as exc:
+            self._print_steps(exc.steps)
             for w in exc.warnings:
                 self.stderr.write(self.style.WARNING(f"WARNING: {w}"))
             lines = "\n".join(f"  - {e}" for e in exc.errors)
@@ -98,7 +106,13 @@ class Command(BaseCommand):
             "nodata": info.nodata,
             "latitude_convention": str(report.latitude_convention),
             "longitude_convention": str(report.longitude_convention),
+            "planet": report.planet,
+            "vertical_datum": f"{report.vertical_datum} [{report.vertical_datum_source}]",
+            "label_statements": report.label_statements,
+            "statistics": report.statistics,
+            "control_points": report.control_points,
         }
+        self._print_steps(report.steps)
         self.stdout.write(json.dumps(summary, indent=2, default=str))
         for w in warnings:
             self.stderr.write(self.style.WARNING(f"WARNING: {w}"))
@@ -106,3 +120,11 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS("Dry run: file is valid, nothing registered."))
         else:
             self.stdout.write(self.style.SUCCESS(f"Registered dataset '{dataset.name}' (id={dataset.id}) status={dataset.status}"))
+
+    def _print_steps(self, steps):
+        if not steps:
+            return
+        self.stdout.write("Import steps:")
+        for st in steps:
+            style = {"OK": self.style.SUCCESS, "ERROR": self.style.ERROR, "WARNING": self.style.WARNING}.get(st["status"], str)
+            self.stdout.write(style(f"  {st['step']:<22} {st['status']:<8} {st['detail']}"))

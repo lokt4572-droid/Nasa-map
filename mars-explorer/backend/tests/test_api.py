@@ -97,16 +97,19 @@ class MissionApiTests(TestCase):
 
 
 class RoutingApiTests(TestCase):
-    def test_plan_is_not_implemented_and_returns_no_route(self):
+    def test_plan_without_dem_returns_no_route(self):
+        # v0.1 answered 501 NOT_IMPLEMENTED; v0.2 has a real planner but still never
+        # invents a route: without a DEM the answer is INSUFFICIENT_TERRAIN_DATA, route null.
         r = APIClient().post(
             "/api/v1/routes/plan/",
             {"start": {"lon_east_deg": 77.4, "lat_deg": 18.4}, "end": {"lon_east_deg": 77.5, "lat_deg": 18.5}},
             format="json",
         )
-        self.assertEqual(r.status_code, 501)
+        self.assertIn(r.status_code, (422, 503))
         body = r.json()
-        self.assertEqual(body["error"]["code"], "NOT_IMPLEMENTED")
-        self.assertNotIn("route", body)
+        if r.status_code == 422:
+            self.assertEqual(body["status"], "INSUFFICIENT_TERRAIN_DATA")
+            self.assertIsNone(body["route"])
 
     def test_plan_validates_input(self):
         r = APIClient().post("/api/v1/routes/plan/", {"start": {"lon_east_deg": 1}}, format="json")

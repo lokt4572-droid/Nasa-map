@@ -1,95 +1,166 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 
-import { MARS_LAYERS } from "../../config/mapLayers";
 import { useRefreshers } from "../../hooks/useBackendData";
-import { describeError, fieldErrors } from "../../services/api";
-import { registerDataset } from "../../services/datasetService";
+import { ApiError, describeError, fieldErrors } from "../../services/api";
+import { type CatalogEntry, type ImportStep, getCatalog, registerDataset } from "../../services/datasetService";
 import { useAppStore } from "../../store/useAppStore";
 
+const PLANET_FILTERS = ["ALL PLANETS", "EARTH", "MARS", "MOON", "MERCURY", "VENUS"];
+const TYPE_FILTERS = ["ALL TYPES", "IMAGERY", "DEM", "TOPOGRAPHY", "WEATHER", "GEOLOGY", "BATHYMETRY"];
+const WORKFLOW = ["SELECT_FILE", "VALIDATE", "READ_METADATA", "CHECK_CRS", "CHECK_NODATA", "CHECK_UNITS", "CHECK_VERTICAL_DATUM", "CHECK_VALUES", "CONTROL_POINTS", "REGISTER_DATASET", "READY"];
+
+function statusClass(s: string) {
+  if (s === "VALID" || s === "ONLINE_SOURCE") return "status-chip--ready";
+  if (s === "PARTIAL_COVERAGE" || s === "NOT_DOWNLOADED") return "status-chip--t-no-data";
+  if (s === "INVALID" || s === "UNAVAILABLE") return "status-chip--error";
+  return "";
+}
+
+function CatalogCard({ e }: { e: CatalogEntry }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="dataset-card">
+      <div className="layer-card__head">
+        <button className="item__main" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <strong>{e.dataset}</strong>
+          <div className="muted small">
+            {e.planet} · {e.data_type} · {e.resolution}
+          </div>
+        </button>
+        <span className={`status-chip ${statusClass(e.status)}`}>{e.status}</span>
+      </div>
+      {open && (
+        <dl className="dl small">
+          <dt>Purpose</dt>
+          <dd>{e.purpose}</dd>
+          <dt>Source</dt>
+          <dd>{e.source}</dd>
+          <dt>Instrument</dt>
+          <dd>{e.instrument}</dd>
+          <dt>Product ID</dt>
+          <dd className="mono wrap">{e.product_id}</dd>
+          <dt>Spatial coverage</dt>
+          <dd>{e.spatial_coverage}</dd>
+          <dt>Temporal coverage</dt>
+          <dd>{e.temporal_coverage}</dd>
+          <dt>CRS</dt>
+          <dd className="wrap">{e.crs}</dd>
+          <dt>Units</dt>
+          <dd>{e.units}</dd>
+          <dt>Vertical datum</dt>
+          <dd>{e.vertical_datum}</dd>
+          <dt>Licence</dt>
+          <dd>{e.license}</dd>
+          <dt>Access</dt>
+          <dd>{e.access === "ONLINE" ? "streamed online (nothing to download)" : "download + import_dem"}</dd>
+          <dt>Documentation</dt>
+          <dd>
+            <a href={e.url} target="_blank" rel="noreferrer">
+              official page
+            </a>
+          </dd>
+          <dt>Facts</dt>
+          <dd className={e.facts.includes("specification") ? "warn-text" : ""}>{e.facts}</dd>
+          {e.local_datasets.length > 0 && (
+            <>
+              <dt>Local copies</dt>
+              <dd>{e.local_datasets.map((d) => `${d.name} (${d.status})`).join(", ")}</dd>
+            </>
+          )}
+        </dl>
+      )}
+    </div>
+  );
+}
+
 export default function DataManager() {
-  const layers = useAppStore((s) => s.layers);
+  const current = useAppStore((s) => s.planet);
   const datasets = useAppStore((s) => s.datasets);
   const health = useAppStore((s) => s.backend.health);
   const backendStatus = useAppStore((s) => s.backend.status);
-  const pointInfo = useAppStore((s) => s.pointInfo.coverage.data);
   const { refreshDatasets } = useRefreshers();
+  const [planet, setPlanet] = useState<string>(current);
+  const [type, setType] = useState("ALL TYPES");
+  const [catalog, setCatalog] = useState<{ data: CatalogEntry[] | null; error: string | null }>({ data: null, error: null });
 
-  const [form, setForm] = useState({ file_path: "", name: "", instrument: "", source: "", vertical_datum: "", units: "" });
-  const [submit, setSubmit] = useState<{ busy: boolean; msg: string | null; err: string[] }>({ busy: false, msg: null, err: [] });
+  const load = useCallback(() => {
+    getCatalog(planet === "ALL PLANETS" ? undefined : planet, type === "ALL TYPES" ? undefined : type)
+      .then((r) => setCatalog({ data: r.results, error: null }))
+      .catch((err) => setCatalog({ data: null, error: describeError(err) }));
+  }, [planet, type]);
+  useEffect(() => {
+    if (backendStatus === "online") load();
+  }, [load, backendStatus]);
+
+  const [form, setForm] = useState({ file_path: "", name: "", planet: current as string, instrument: "", source: "", vertical_datum: "", units: "" });
+  const [submit, setSubmit] = useState<{ busy: boolean; msg: string | null; err: string[]; steps: ImportStep[] }>({ busy: false, msg: null, err: [], steps: [] });
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setSubmit({ busy: true, msg: null, err: [] });
+    setSubmit({ busy: true, msg: null, err: [], steps: [{ step: "SELECT_FILE", status: "…", detail: form.file_path }] });
     try {
       const r = await registerDataset(form);
-      setSubmit({ busy: false, msg: `Registered ${r.dataset.name} (${r.dataset.status}). ${r.warnings.join(" ")}`, err: [] });
+      setSubmit({ busy: false, msg: `Registered ${r.dataset.name} (${r.dataset.status}). ${r.warnings.join(" ")}`, err: [], steps: r.steps });
       void refreshDatasets();
+      load();
     } catch (err) {
-      const details = fieldErrors(err);
-      setSubmit({ busy: false, msg: null, err: [describeError(err), ...details] });
+      const steps = err instanceof ApiError ? ((err.details as { steps?: ImportStep[] } | undefined)?.steps ?? []) : [];
+      const errors = err instanceof ApiError ? ((err.details as { errors?: string[] } | undefined)?.errors ?? []) : [];
+      setSubmit({ busy: false, msg: null, err: [describeError(err), ...errors, ...fieldErrors(err).filter((x) => !x.startsWith("errors") && !x.startsWith("steps") && !x.startsWith("warnings"))], steps });
     }
   };
 
-  const coveringIds = new Set(pointInfo?.datasets.map((d) => d.id) ?? []);
+  const local = (datasets.data ?? []).filter((d) => planet === "ALL PLANETS" || (d.planet ?? "MARS") === planet);
 
   return (
     <div className="panel-section">
-      <h4 className="subhead">Online map layers (NASA Trek WMTS)</h4>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Layer</th>
-            <th>Res.</th>
-            <th>State</th>
-          </tr>
-        </thead>
-        <tbody>
-          {MARS_LAYERS.map((l) => (
-            <tr key={l.id}>
-              <td>{l.name}</td>
-              <td className="mono">{l.resolution}</td>
-              <td>
-                <span className={`status-chip status-chip--${layers[l.id]?.status}`}>{layers[l.id]?.status}</span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="tabs" role="tablist" aria-label="Planet filter">
+        {PLANET_FILTERS.map((p) => (
+          <button key={p} className={`tab ${planet === p ? "tab--active" : ""}`} onClick={() => setPlanet(p)}>
+            {p}
+          </button>
+        ))}
+      </div>
+      <div className="tabs" role="tablist" aria-label="Type filter">
+        {TYPE_FILTERS.map((t) => (
+          <button key={t} className={`tab ${type === t ? "tab--active" : ""}`} onClick={() => setType(t)}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <h4 className="subhead">Catalog ({catalog.data?.length ?? 0})</h4>
+      {catalog.error && <div className="error-text">{catalog.error}</div>}
+      {catalog.data?.length === 0 && <div className="empty">No products for this filter{type === "GEOLOGY" ? " (no geology products are integrated yet)" : ""}.</div>}
+      {catalog.data?.map((e) => <CatalogCard key={e.key} e={e} />)}
 
       <h4 className="subhead">
-        Local DEMs (backend){" "}
+        Local datasets{" "}
         <button className="btn btn--small btn--ghost" onClick={() => void refreshDatasets()} disabled={backendStatus !== "online"}>
           Refresh
         </button>
       </h4>
       <div className="hint">
         Data directory: <span className="mono wrap">{health?.data_dir.path ?? "unknown (backend offline)"}</span>
-        {health && !health.data_dir.exists && <span className="warn-text"> — directory does not exist</span>}
         <br />
         Raster backend:{" "}
         {health ? (health.raster_backend.available ? `${health.raster_backend.backend}, GDAL ${health.raster_backend.gdal_version}` : "NOT AVAILABLE") : "—"}
       </div>
-      {datasets.status === "loading" && <div className="hint">Loading…</div>}
       {datasets.error && <div className="error-text">{datasets.error}</div>}
-      {datasets.data && datasets.data.length === 0 && (
-        <div className="empty">
-          No DEM registered. Download a DEM (see data/mars/README.md) and import it with
-          <code> python manage.py import_dem</code>.
-        </div>
-      )}
-      {datasets.data?.map((d) => (
+      {local.length === 0 && <div className="empty">No local datasets for this filter.</div>}
+      {local.map((d) => (
         <div key={d.id} className="dataset-card">
           <div className="layer-card__head">
             <strong>{d.name}</strong>
-            <span className={`status-chip status-chip--ds-${d.status.toLowerCase()}`}>{d.status}</span>
+            <span className={`status-chip ${statusClass(d.status)}`}>{d.status}</span>
           </div>
           <div className="layer-card__meta">
-            {d.instrument || "instrument n/a"} · {d.resolution_meters ? `${d.resolution_meters.toFixed(1)} m` : "resolution n/a"} ·{" "}
-            {d.units || "units n/a"} · {d.latitude_convention}
+            {d.planet ?? "MARS"} · {d.instrument || "instrument n/a"} · {d.resolution_meters ? `${(d.resolution_meters / 1000).toFixed(2)} km` : "resolution n/a"} ·{" "}
+            {d.units || "units n/a"} · datum {d.vertical_datum}
           </div>
           <div className="mono wrap small">{d.file_path}</div>
+          {d.file_size ? <div className="small muted">{(d.file_size / 1e6).toFixed(1)} MB · {d.checksum.slice(0, 23)}…</div> : null}
           {!d.file_exists && <div className="error-text">File missing on disk</div>}
-          {coveringIds.has(d.id) && <div className="ok-text">Covers the selected point</div>}
           {d.validation_messages.map((m, i) => (
             <div key={i} className="warn-text small">
               {m.message}
@@ -98,11 +169,21 @@ export default function DataManager() {
         </div>
       ))}
 
-      <h4 className="subhead">Register a local DEM file</h4>
-      <p className="hint">
-        The file must already be inside the data directory (copy it to <code>data/mars/raw/…</code>). Large files: prefer the CLI
-        importer. Browser upload is intentionally not supported.
+      <h4 className="subhead">Import workflow</h4>
+      <p className="hint small">
+        Copy the file (and its PDS label) into the data directory first; the browser never uploads gigabytes. Files over the API size
+        limit must use the CLI: <code>python manage.py import_dem</code>.
       </p>
+      <ol className="workflow">
+        {WORKFLOW.map((w) => {
+          const st = submit.steps.find((s) => s.step === w);
+          return (
+            <li key={w} className={st ? `wf wf--${st.status.toLowerCase()}` : "wf"} title={st?.detail}>
+              {w.replace(/_/g, " ")} {st ? `· ${st.status}` : ""}
+            </li>
+          );
+        })}
+      </ol>
       <form className="form" onSubmit={onSubmit}>
         <label>
           Path relative to data dir
@@ -110,7 +191,15 @@ export default function DataManager() {
         </label>
         <label>
           Dataset name (slug)
-          <input required pattern="[-a-zA-Z0-9_]+" placeholder="mola-megdr-global" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <input required pattern="[-a-zA-Z0-9_]+" placeholder="mola-global" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </label>
+        <label>
+          Planet (the file CRS must match it)
+          <select value={form.planet} onChange={(e) => setForm({ ...form, planet: e.target.value })}>
+            {PLANET_FILTERS.slice(1).map((p) => (
+              <option key={p}>{p}</option>
+            ))}
+          </select>
         </label>
         <label>
           Instrument
@@ -121,7 +210,7 @@ export default function DataManager() {
           <input placeholder="NASA PDS Geosciences Node" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} />
         </label>
         <label>
-          Vertical datum (from the label)
+          Vertical datum (if not in the label)
           <input value={form.vertical_datum} onChange={(e) => setForm({ ...form, vertical_datum: e.target.value })} />
         </label>
         <label>

@@ -1,10 +1,13 @@
 import { bboxContains, getLayerConfig } from "../../config/mapLayers";
 import { MAP_COORDINATE_CONVENTION, formatLat, formatLon } from "../../config/marsProjection";
+import { PLANETS } from "../../config/planetRegistry";
 import { useAppStore } from "../../store/useAppStore";
+import LocalTerrain3D from "../terrain/LocalTerrain3D";
 import TerrainInfo from "../terrain/TerrainInfo";
 
 export default function RightPanel() {
   const point = useAppStore((s) => s.selectedPoint);
+  const body = PLANETS[useAppStore((s) => s.planet)];
   const coverage = useAppStore((s) => s.pointInfo.coverage);
   const lonMode = useAppStore((s) => s.settings.lonMode);
   const selectPoint = useAppStore((s) => s.selectPoint);
@@ -40,10 +43,13 @@ export default function RightPanel() {
         </dd>
         <dt>CRS</dt>
         <dd className="mono wrap">{point.crs}</dd>
+        <dt>Planet</dt>
+        <dd>{body.name}</dd>
         <dt>Convention</dt>
         <dd className="small">
-          Longitude east-positive −180…180, degrees. Latitude: as declared by source (planetocentric vs planetographic not
-          stated by NASA Trek capabilities). Interpreted with {MAP_COORDINATE_CONVENTION.interpretedAs} parameters.
+          Longitude {body.longitudeConvention.toLowerCase()}, −180…180, degrees. Latitude: {body.id === "MARS"
+            ? `as declared by source (planetocentric vs planetographic not stated by NASA Trek capabilities). Interpreted with ${MAP_COORDINATE_CONVENTION.interpretedAs} parameters.`
+            : `${body.latitudeType.toLowerCase()}; reference ${body.coordinateSystem}.`}
         </dd>
         <dt>Active layer</dt>
         <dd>{layer.name}</dd>
@@ -64,6 +70,7 @@ export default function RightPanel() {
       </dl>
       <h4 className="subhead">Terrain</h4>
       <TerrainInfo />
+      <LocalTerrain3D />
     </aside>
   );
 }

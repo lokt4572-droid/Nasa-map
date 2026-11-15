@@ -22,9 +22,14 @@ class CoordinateFieldsMixin(serializers.Serializer):
         choices=[c.value for c in LatitudeConvention], default=LatitudeConvention.AS_DECLARED_BY_SOURCE.value
     )
 
+    def _planet(self) -> str:
+        data = getattr(self, "initial_data", None)
+        planet = data.get("planet") if isinstance(data, dict) else None
+        return (planet or self.context.get("planet") or "MARS").upper()
+
     def validate_crs(self, value: str) -> str:
         try:
-            resolve_crs(value)
+            resolve_crs(value, planet=self._planet())
         except UnknownCRSError as exc:
             raise serializers.ValidationError(str(exc)) from exc
         return value
@@ -34,4 +39,16 @@ class CoordinateFieldsMixin(serializers.Serializer):
 
 
 class PointQuerySerializer(CoordinateFieldsMixin):
-    pass
+    planet = serializers.ChoiceField(choices=["MARS", "EARTH", "MOON", "MERCURY", "VENUS"], default="MARS")
+
+
+def default_point_crs(planet: str) -> str:
+    """CRS assumed for a point when the client does not send one (degrees, map frame)."""
+    from services.planet_registry import get_planet
+
+    body = get_planet(planet)
+    if body.id == "MARS":
+        return TREK_DECLARED_CRS
+    if body.id == "EARTH":
+        return "EPSG:4326"
+    return body.map_crs or body.reference_crs

@@ -30,3 +30,6 @@ data/mars/**
 .idea/
 Thumbs.db
 .DS_Store
+
+# Provider caches (GIBS capabilities etc.) - regenerated automatically
+data/cache/

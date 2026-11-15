@@ -49,6 +49,11 @@ INSTALLED_APPS = [
     "apps.hazards",
     "apps.terrain",
     "apps.routing",
+    "apps.planets",
+    "apps.weather",
+    "apps.geocoding",
+    "apps.earth",
+    "apps.ai",
 ]
 
 MIDDLEWARE = [
@@ -106,6 +111,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- CORS: only the configured frontend origin may call the API from a browser.
 CORS_ALLOWED_ORIGINS = env_list("FRONTEND_ORIGIN", "http://127.0.0.1:5173,http://localhost:5173")
+# Terrain render metadata headers must be readable by the frontend.
+CORS_EXPOSE_HEADERS = ["X-Visualization", "X-Value-Min", "X-Value-Max", "X-Value-Units", "X-Valid-Fraction", "X-Dataset"]
 
 # --- Django REST Framework
 REST_FRAMEWORK = {
@@ -129,7 +136,7 @@ MARS_DATA_DIR = (_data_dir if _data_dir.is_absolute() else (BASE_DIR / _data_dir
 # Server-side only secret; not used by NASA Trek WMTS.
 NASA_API_KEY = os.environ.get("NASA_API_KEY", "")
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.4.0"
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOGGING = {
@@ -144,3 +151,32 @@ LOGGING = {
         "mars": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
     },
 }
+
+# --- External providers (v0.2). All overridable via environment variables.
+HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "MARS-EXPLORER/0.4 (planetary GIS prototype; local)")
+
+# Remote elevation data (v0.4): DTMs found in the USGS STAC catalogue are read window by window
+# with HTTP range requests. Set REMOTE_DEM_ENABLED=0 to keep the backend fully local.
+REMOTE_DEM_ENABLED = os.environ.get("REMOTE_DEM_ENABLED", "1") not in ("0", "false", "False", "")
+REMOTE_RASTER_HOSTS = tuple(
+    h.strip() for h in os.environ.get("REMOTE_RASTER_HOSTS", "astrogeo-ard.s3-us-west-2.amazonaws.com").split(",") if h.strip()
+)
+NOMINATIM_URL = os.environ.get("NOMINATIM_URL", "https://nominatim.openstreetmap.org/search")
+OPEN_METEO_URL = os.environ.get("OPEN_METEO_URL", "https://api.open-meteo.com/v1/forecast")
+NASA_POWER_URL = os.environ.get("NASA_POWER_URL", "https://power.larc.nasa.gov/api/temporal/daily/point")
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "mars-explorer"}}
+
+# Files registered through the browser/API must be small; big DEMs go through the CLI.
+MAX_REGISTER_FILE_BYTES = int(os.environ.get("MAX_REGISTER_FILE_BYTES", str(500 * 1024 * 1024)))
+
+
+# Optional AI assistance (v0.4). The route engine never depends on it.
+#   AI_PROVIDER: rules (default: deterministic parser, no model) | ollama (local, free) |
+#                anthropic (remote; ANTHROPIC_API_KEY must be set in the BACKEND environment) | none
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "rules")
+AI_MODEL = os.environ.get("AI_MODEL", "")
+AI_BASE_URL = os.environ.get("AI_BASE_URL", "")
+AI_EFFORT = os.environ.get("AI_EFFORT", "medium")
+AI_TIMEOUT_S = float(os.environ.get("AI_TIMEOUT_S", "60"))
+# Ingest detections from an external, separately validated perception model (off by default).
+AI_PERCEPTION_INGEST_ENABLED = os.environ.get("AI_PERCEPTION_INGEST_ENABLED", "0") in ("1", "true", "True")

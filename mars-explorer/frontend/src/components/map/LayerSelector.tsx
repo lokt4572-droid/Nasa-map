@@ -1,13 +1,27 @@
-import { MARS_LAYERS } from "../../config/mapLayers";
+import { layersForPlanet } from "../../config/mapLayers";
 import { mapController } from "../../services/marsMapService";
+import { coverageAtView, type CoverageAtView } from "../../services/adaptiveLayers";
+import { getLayerSummary } from "../../services/mapDiagnostics";
 import { useAppStore } from "../../store/useAppStore";
+import { useDiagnosticsVersion } from "./MapDiagnostics";
 
 const STATUS_LABEL = { idle: "NOT LOADED", loading: "LOADING", ready: "READY", error: "ERROR" } as const;
+const COVERAGE_LABEL: Record<CoverageAtView, string> = {
+  IN_VIEW: "Coverage in view",
+  OUTSIDE_VIEW: "No coverage in this view",
+  BELOW_DISPLAY_THRESHOLD: "Coverage in view — zoom in to display",
+  OVERZOOMED: "In view, beyond native resolution",
+};
 
 export default function LayerSelector() {
+  const planet = useAppStore((s) => s.planet);
+  const planetLayers = layersForPlanet(planet);
   const layers = useAppStore((s) => s.layers);
   const activeLayerId = useAppStore((s) => s.activeLayerId);
-  const { setLayerVisible, setLayerOpacity, setActiveLayer, retryLayer } = useAppStore.getState();
+  const view = useAppStore((s) => s.view);
+  const autoHighRes = useAppStore((s) => s.settings.autoHighRes);
+  useDiagnosticsVersion();
+  const { setLayerVisible, setLayerOpacity, setActiveLayer, retryLayer, setSettings } = useAppStore.getState();
 
   return (
     <div className="panel-section">
@@ -15,7 +29,11 @@ export default function LayerSelector() {
         NASA Mars Trek WMTS layers. Tile grids are read from each layer's GetCapabilities. Pixels are imagery, never
         elevation values.
       </p>
-      {MARS_LAYERS.map((cfg) => {
+      <label className="check" title="Regional high-resolution layers switch on when their coverage is in view and switch off when it leaves. The global layer always stays underneath. Your own on/off choices are respected.">
+        <input type="checkbox" checked={autoHighRes} onChange={(e) => setSettings({ autoHighRes: e.target.checked })} aria-label="Auto high-resolution layers" />
+        <span>Auto high-resolution layers</span>
+      </label>
+      {planetLayers.map((cfg) => {
         const st = layers[cfg.id]!;
         return (
           <div key={cfg.id} className={`layer-card ${activeLayerId === cfg.id ? "layer-card--active" : ""}`}>
@@ -31,6 +49,12 @@ export default function LayerSelector() {
               </label>
               <span className={`status-chip status-chip--${st.status}`}>{STATUS_LABEL[st.status]}</span>
             </div>
+            {view.extent && (
+              <div className="layer-card__cov" data-testid={`coverage-${cfg.id}`}>
+                {COVERAGE_LABEL[coverageAtView(cfg, view.extent, view.resolution, st.grid?.resolutionsDegPerPx)]}
+                {st.autoEnabled && st.visible ? " · switched on automatically" : ""}
+              </div>
+            )}
             <div className="layer-card__meta">
               {cfg.instrument} · {cfg.resolution ?? "resolution n/a"} · {cfg.coverage === "global" ? "Global" : "Regional"} ·{" "}
               {cfg.category}
@@ -63,8 +87,11 @@ export default function LayerSelector() {
                 </button>
               )}
             </div>
-            {st.status === "ready" && st.tiles.errors > 0 && (
-              <div className="warn-text">{st.tiles.errors} tile request(s) failed (missing tiles or network).</div>
+            {st.status === "ready" && (getLayerSummary(cfg.id)?.failed ?? 0) > 0 && (
+              <div className="warn-text">
+                {getLayerSummary(cfg.id)!.failed} tile request(s) failed ({getLayerSummary(cfg.id)!.lastError}). Cancelled
+                requests are not counted.
+              </div>
             )}
             {st.error && <div className="error-text">{st.error}</div>}
           </div>

@@ -23,6 +23,9 @@ from services.mars_coordinates import transform_point
 logger = logging.getLogger("mars.dem")
 
 
+from services import remote_raster
+
+
 class RasterBackendUnavailable(RuntimeError):
     pass
 
@@ -97,11 +100,11 @@ class RasterInfo:
 
 def inspect_raster(path: str | Path) -> RasterInfo:
     rasterio = _import_rasterio()
-    p = Path(path)
-    if not p.is_file():
-        raise FileNotFoundError(f"File not found: {p}")
+    p = path if remote_raster.is_remote(path) else Path(path)
+    if not remote_raster.file_available(p):
+        raise FileNotFoundError("Raster not found" if remote_raster.is_remote(path) else f"File not found: {p}")
     try:
-        with rasterio.open(p, "r") as src:
+        with remote_raster.open_raster(path) as src:
             crs = src.crs
             crs_name = None
             crs_geo = None
@@ -158,14 +161,35 @@ def _dataset_pyproj_crs(src):
     return CRS.from_wkt(src.crs.to_wkt())
 
 
+def x_wrap_period(ds_crs, left: float, right: float) -> float | None:
+    """Period for wrapping x around the planet, or None.
+
+    Geographic CRS: 360 degrees. Projected cylindrical CRS whose raster spans the whole
+    circumference (e.g. MOLA MEGDR, Equirectangular with central_meridian 180): the raster
+    width. Without this, the longitude exactly on the raster seam (lon 0 for a 180-centred
+    MEGDR) falls on the right edge and is wrongly reported as outside the DEM."""
+    if ds_crs.is_geographic:
+        return 360.0
+    try:
+        a = ds_crs.ellipsoid.semi_major_metre
+    except Exception:  # noqa: BLE001
+        return None
+    width = right - left
+    circumference = 2 * math.pi * a
+    if a and abs(width - circumference) <= 1e-4 * circumference:
+        return width
+    return None
+
+
 def _locate(src, x: float, y: float, point_crs) -> tuple[int, int, float, float]:
     """Return (row, col, x_ds, y_ds) of the point inside the raster, handling 360° wrap."""
     ds_crs = _dataset_pyproj_crs(src)
     x_ds, y_ds = transform_point(x, y, point_crs, ds_crs)
     candidates = [x_ds]
-    if ds_crs.is_geographic:
-        candidates += [x_ds + 360.0, x_ds - 360.0]
     b = src.bounds
+    period = x_wrap_period(ds_crs, b.left, b.right)
+    if period:
+        candidates += [x_ds + period, x_ds - period]
     for cx in candidates:
         if b.left <= cx < b.right and b.bottom < y_ds <= b.top:
             row, col = src.index(cx, y_ds)
@@ -189,7 +213,7 @@ def sample_point(path: str | Path, x: float, y: float, point_crs) -> PointSample
     rasterio = _import_rasterio()
     from rasterio.windows import Window
 
-    with rasterio.open(Path(path), "r") as src:
+    with remote_raster.open_raster(path) as src:
         row, col, xd, yd = _locate(src, x, y, point_crs)
         raw = src.read(1, window=Window(col, row, 1, 1), masked=True)
         units = src.units[0] if src.units and src.units[0] else None
@@ -223,7 +247,7 @@ def read_window(path: str | Path, x: float, y: float, point_crs, half_size: int 
 
     if half_size < 1:
         raise ValueError("half_size must be >= 1")
-    with rasterio.open(Path(path), "r") as src:
+    with remote_raster.open_raster(path) as src:
         row, col, xd, yd = _locate(src, x, y, point_crs)
         size = 2 * half_size + 1
         win = Window(col - half_size, row - half_size, size, size)
@@ -249,3 +273,98 @@ def read_window(path: str | Path, x: float, y: float, point_crs, half_size: int 
             crs=_dataset_pyproj_crs(src),
             units=src.units[0] if src.units and src.units[0] else None,
         )
+
+
+# ---------------------------------------------------------------------------
+# Import-time checks (v0.2). All reads are decimated or windowed: a global DEM is never
+# loaded into memory at full resolution.
+
+OVERVIEW_MAX_SIDE = 1024
+
+
+def overview_statistics(path: str | Path, max_side: int = OVERVIEW_MAX_SIDE) -> dict[str, Any]:
+    """Statistics of band 1 from a decimated read (nearest neighbour), after scale/offset.
+
+    Values are approximate (computed on at most max_side x max_side cells) and labelled so."""
+    rasterio = _import_rasterio()
+    with remote_raster.open_raster(path) as src:
+        factor = max(1, int(math.ceil(max(src.width, src.height) / max_side)))
+        out_shape = (max(1, src.height // factor), max(1, src.width // factor))
+        data = src.read(1, out_shape=out_shape, masked=True)
+        scale = float(src.scales[0]) if src.scales else 1.0
+        offset = float(src.offsets[0]) if src.offsets else 0.0
+        arr = np.ma.filled(data.astype("float64"), np.nan) * scale + offset
+        arr[~np.isfinite(arr)] = np.nan
+        valid = arr[~np.isnan(arr)]
+        res: dict[str, Any] = {
+            "sampled_shape": list(out_shape),
+            "decimation_factor": factor,
+            "valid_cells": int(valid.size),
+            "total_cells": int(arr.size),
+            "valid_fraction": float(valid.size) / float(arr.size) if arr.size else 0.0,
+            "approximate": factor > 1,
+        }
+        if valid.size:
+            res.update(
+                min=float(valid.min()),
+                max=float(valid.max()),
+                mean=float(valid.mean()),
+                median=float(np.median(valid)),
+            )
+        return res
+
+
+def control_points(path: str | Path) -> list[dict[str, Any]]:
+    """Read five control cells (centre + quadrant centres) by pixel index, without any
+    coordinate transformation, to prove that single-cell reads work."""
+    rasterio = _import_rasterio()
+    from rasterio.windows import Window
+
+    pts = []
+    with remote_raster.open_raster(path) as src:
+        h, w = src.height, src.width
+        cells = [(h // 2, w // 2), (h // 4, w // 4), (h // 4, 3 * w // 4), (3 * h // 4, w // 4), (3 * h // 4, 3 * w // 4)]
+        scale = float(src.scales[0]) if src.scales else 1.0
+        offset = float(src.offsets[0]) if src.offsets else 0.0
+        for row, col in cells:
+            raw = src.read(1, window=Window(col, row, 1, 1), masked=True)
+            x, y = src.xy(row, col)
+            value = None if np.ma.is_masked(raw) else float(raw[0, 0]) * scale + offset
+            if value is not None and not math.isfinite(value):
+                value = None
+            pts.append({"row": row, "col": col, "x_dataset": float(x), "y_dataset": float(y), "value": value})
+    return pts
+
+
+LABEL_SUFFIXES = {".xml", ".lbl"}
+
+
+def read_label_text(path: str | Path, max_bytes: int = 2_000_000) -> str | None:
+    """Return the text of a PDS3/PDS4 label (the file itself if it is a label, or a
+    sibling .xml/.lbl with the same stem). Used only to *report* what the label states."""
+    if remote_raster.is_remote(path):
+        return None  # remote products: the datum statement comes from the provider's catalogue
+    p = Path(path)
+    candidates = [p] if p.suffix.lower() in LABEL_SUFFIXES else []
+    candidates += [p.with_suffix(s) for s in (".xml", ".lbl", ".XML", ".LBL")]
+    for c in candidates:
+        if c.is_file() and c.suffix.lower() in LABEL_SUFFIXES:
+            with c.open("rb") as fh:
+                return fh.read(max_bytes).decode("utf-8", errors="replace")
+    return None
+
+
+def product_files(path: str | Path) -> list[Path]:
+    """All files GDAL reads for this product (label + data files), primary file first."""
+    rasterio = _import_rasterio()
+    p = Path(path).resolve()
+    with rasterio.open(p) as src:
+        files = [Path(f).resolve() for f in (src.files or [str(p)])]
+    if p not in files:
+        files.insert(0, p)
+    seen, out = set(), []
+    for f in files:
+        if f not in seen and f.is_file():
+            seen.add(f)
+            out.append(f)
+    return out

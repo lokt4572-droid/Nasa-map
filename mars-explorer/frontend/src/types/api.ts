@@ -34,6 +34,9 @@ export type DatasetStatus = "AVAILABLE" | "DOWNLOADING" | "PROCESSING" | "VALID"
 export interface Dataset {
   id: number;
   name: string;
+  planet?: string;
+  license?: string;
+  download_url?: string;
   source: string;
   instrument: string;
   product_id: string;
@@ -160,6 +163,8 @@ export interface Mission {
   demo_mode: boolean;
   waypoints: Waypoint[];
   hazard_count: number;
+  client_id?: string | null;
+  version?: number;
   created_at: string;
   updated_at: string;
 }
@@ -190,6 +195,8 @@ export interface Hazard extends MarsPointFields {
   reference_layer: string;
   reported_by: string;
   observed_at: string | null;
+  client_id?: string | null;
+  version?: number;
   created_at: string;
   updated_at: string;
 }
@@ -197,3 +204,162 @@ export interface Hazard extends MarsPointFields {
 export type HazardInput = Omit<Hazard, "id" | "created_at" | "updated_at" | "verification" | "observed_at"> & {
   verification?: HazardVerification;
 };
+
+// ---------------------------------------------------------------- v0.2 routing
+export type RouteProfileId = "CONSERVATIVE" | "STANDARD";
+
+export interface RouteProfile {
+  id: RouteProfileId;
+  description: string;
+  max_slope_deg: number;
+  slope_weight: number;
+  roughness_weight: number;
+  roughness_ref_m: number;
+  allow_unknown_terrain: boolean;
+  unknown_multiplier: number | null;
+  hazard_buffer_m: number;
+  max_unknown_fraction: number;
+  hazard_proximity_weight?: number;
+  unknown_data_policy?: UnknownDataPolicy;
+  disclaimer: string;
+}
+
+export type UnknownDataPolicy = "REJECT" | "ALLOW_MARKED";
+export type RouteClassification = "KNOWN_TERRAIN_ROUTE" | "PARTIALLY_UNVERIFIED_ROUTE" | "NO_VALID_ROUTE";
+
+export interface RouteMetrics {
+  distance_m: number;
+  distance_3d_m: number;
+  elevation_gain_m: number;
+  elevation_loss_m: number;
+  max_step_grade_deg: number;
+  max_cell_slope_deg: number;
+  known_terrain_pct: number;
+  nodata_pct_along_route: number;
+  cost: number;
+  terrain_cost: number;
+  dem_source?: string;
+  dem_name?: string;
+  dem_instrument?: string;
+  dem_resolution_m?: number | null;
+  grid_cell_size_m?: { dx_min: number; dx_max: number; dy_mean: number };
+  window_nodata_pct?: number;
+  suitability_class?: string;
+}
+
+export interface RouteBrief {
+  label: string;
+  classification: RouteClassification;
+  distance_m: number;
+  cost: number;
+  terrain_cost: number;
+  elevation_gain_m: number;
+  max_cell_slope_deg: number;
+  known_terrain_pct: number;
+}
+
+export interface RouteComparison {
+  route_a: RouteBrief;
+  route_b: RouteBrief | null;
+  difference_b_minus_a?: { distance_m: number; terrain_cost: number; cost: number };
+  note: string;
+}
+
+export interface RouteSummary {
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  cells: number;
+  distance_m: number;
+  distance_3d_m: number;
+  total_ascent_m: number;
+  total_descent_m: number;
+  max_step_grade_deg: number;
+  unknown_terrain_distance_m: number;
+  unknown_terrain_fraction: number;
+  elevation_profile: { distance_m: number; elevation_m: number | null }[];
+  overlap_with_primary?: number;
+  // v0.3 (absent on routes saved by v0.2)
+  classification?: RouteClassification;
+  unverified_segments?: { from_m: number; to_m: number; status: "UNVERIFIED_NO_DEM_DATA" }[];
+  max_cell_slope_deg?: number;
+  geometry_simplified?: { type: "LineString"; coordinates: [number, number][] };
+  metrics?: RouteMetrics;
+  // v0.4
+  geometry_display?: { type: "MultiLineString"; coordinates: [number, number][][] };
+  validation?: { valid: boolean; problems: string[]; checked_steps: number };
+}
+
+export type CalculationStatus =
+  | "CALCULATED"
+  | "INSUFFICIENT_TERRAIN_DATA"
+  | "START_OUTSIDE_COVERAGE"
+  | "DESTINATION_OUTSIDE_COVERAGE"
+  | "UNKNOWN_TERRAIN"
+  | "INVALID_DATASET"
+  | "NO_VALID_ROUTE"
+  | "PROCESSING_ERROR";
+
+export interface ComparisonTable {
+  criteria: { key: string; title: string; unit: string; lower_is_better: boolean }[];
+  routes: { name: string; label: string; classification?: string; descriptors: string[]; values: Record<string, number | null> }[];
+  shared: { dem?: string; dem_resolution_m?: number | null; grid_cell_m?: number | null; data_quality?: string; planning_scope?: string };
+  note: string;
+}
+
+export interface RoutePlanResponse {
+  id: number;
+  status: "ROUTE_FOUND";
+  route_classification?: RouteClassification;
+  comparison?: RouteComparison;
+  route: RouteSummary;
+  return_route?: RouteSummary | null;
+  alternative_route?: RouteSummary | null;
+  alternative_note?: string;
+  grid: { rows: number; cols: number; decimation_factor: number; cell_size_m: { dx_min: number; dx_max: number; dy_mean: number }; window_scale?: number | string };
+  profile: RouteProfile;
+  dataset: { id: number; name: string; resolution_m: number | null; vertical_datum: string; source: string };
+  hazards_considered: number;
+  disclaimer: string;
+  data_quality: RouteDataQuality;
+  // v0.4
+  calculation_status?: CalculationStatus;
+  route_class?: string;
+  planning_level?: { level: number; name: string };
+  route_label?: string;
+  warnings?: string[];
+  comparison_table?: ComparisonTable;
+  algorithm?: { search: string; connectivity: number; geometry_source: string };
+}
+
+export interface RouteDataQuality {
+  dem: { id: number; name: string; instrument: string; product_id: string; resolution_m: number | null; vertical_datum: string; crs: string };
+  grid_decimation_factor: number;
+  grid_cell_size_m: { dx_min: number; dx_max: number; dy_mean: number };
+  window_nodata_fraction: number;
+  route_unknown_terrain_fraction: number | null;
+  latitude_handling: string;
+  resolution_assessment: {
+    effective_cell_m: number;
+    dataset_resolution_m: number | null;
+    class: "DETAILED_TRAVERSE_STUDY" | "SITE_RECONNAISSANCE" | "REGIONAL_PLANNING_ONLY";
+    allowed_use: string;
+    smallest_resolvable_feature_m: number;
+    suitable_for_astronaut_scale_route_safety: false;
+    astronaut_scale_route_safety: "NOT_SUITABLE" | "NOT_ASSESSED_NO_VALIDATED_MODEL";
+    reason: string;
+  };
+  planning_scope?: { scope: string; reason: string };
+  // v0.4
+  dataset?: string;
+  resolution_m?: number | null;
+  grid_cell_m?: number;
+  access?: string;
+  quality_status?: string;
+  effective_accuracy?: string;
+  coverage_percentage?: number | null;
+  nodata_percentage?: number | null;
+  unknown_terrain_percentage?: number | null;
+}
+
+export interface RoutePoint extends MarsPointFields {
+  planet?: string;
+}

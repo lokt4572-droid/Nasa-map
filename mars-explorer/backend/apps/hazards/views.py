@@ -1,10 +1,12 @@
 from rest_framework import viewsets
 
+from apps.core.sync import SyncViewSetMixin
+
 from .models import Hazard
 from .serializers import HazardSerializer
 
 
-class HazardViewSet(viewsets.ModelViewSet):
+class HazardViewSet(SyncViewSetMixin, viewsets.ModelViewSet):
     serializer_class = HazardSerializer
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 

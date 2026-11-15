@@ -20,7 +20,17 @@ class Dataset(models.Model):
         ROUGHNESS = "ROUGHNESS", "Roughness"
         OTHER = "OTHER", "Other"
 
+    class Planet(models.TextChoices):
+        MARS = "MARS", "Mars"
+        EARTH = "EARTH", "Earth"
+        MOON = "MOON", "Moon"
+        MERCURY = "MERCURY", "Mercury"
+        VENUS = "VENUS", "Venus"
+
     name = models.SlugField(max_length=120, unique=True)
+    planet = models.CharField(max_length=10, choices=Planet.choices, default=Planet.MARS, db_index=True)
+    license = models.CharField(max_length=300, blank=True)
+    download_url = models.URLField(max_length=500, blank=True)
     source = models.CharField(max_length=200, blank=True, help_text="Archive / provider, e.g. NASA PDS Geosciences Node")
     instrument = models.CharField(max_length=120, blank=True, help_text="e.g. MGS MOLA, MRO HiRISE")
     product_id = models.CharField(max_length=200, blank=True)
@@ -49,6 +59,12 @@ class Dataset(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AVAILABLE)
     validation_messages = models.JSONField(default=list, blank=True)
     metadata = models.JSONField(default=dict, blank=True, help_text="Full GDAL inspection result")
+    # v0.4: where the values are read from, the real footprint and the provider's quality data.
+    access = models.CharField(max_length=12, default="LOCAL", help_text="LOCAL file or REMOTE_COG (HTTP range reads)")
+    footprint = models.JSONField(null=True, blank=True, help_text="GeoJSON footprint in planetocentric lon/lat, from the provider")
+    quality = models.JSONField(default=dict, blank=True, help_text="Provider quality metadata (valid %, QA links)")
+    quality_status = models.CharField(max_length=30, default="NOT_DOCUMENTED")
+    source_url = models.URLField(max_length=500, blank=True, help_text="Catalogue record of the product")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

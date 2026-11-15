@@ -67,3 +67,30 @@ computes the scale itself on the Mars 2000 ellipsoid (east–west at the view ce
 | Equator ground resolution, 0.703125 °/px | 0.703125·π/180·a |
 | Trek level-0 resolution | 360°/512 px = 0.703125 °/px (±2×10⁻⁶ rel.) |
 | 77.45° E | 282.55° W |
+
+---
+
+## v0.2 — other bodies (see also PLANET_REGISTRY.md)
+
+| Body | Map CRS (as declared by the service) | Interpreted with | Radius (m) | Latitude | Longitude |
+|---|---|---|---|---|---|
+| Mars | `urn:ogc:def:crs:EPSG::104905` | ESRI:104905 ellipsoid | 3 396 190 / 3 376 200 | as declared (map); MEGDR planetocentric | east, −180…180 (map) |
+| Moon | `urn:ogc:def:crs:EPSG::104903` | ESRI:104903 sphere | 1 737 400 | planetocentric | east, −180…180 |
+| Mercury | `urn:ogc:def:crs:IAU2000::19900` | IAU_2015:19900 sphere | 2 440 530 (conflict: ESRI:104974 = 2 439 400) | planetocentric | east, −180…180 (map); USGS DEM 0…360 |
+| Venus | — (no map service) | IAU_2015:29900 sphere | 6 051 800 | planetocentric | GTDR 0…360 |
+| Earth | `EPSG:3857` (map), `EPSG:4326` (points) | WGS 84 | 6 378 137 / 6 356 752.314 | geodetic | east, −180…180 |
+
+Rules enforced in code (backend `resolve_crs(identifier, planet=…)`, frontend per-body projections):
+* a CRS is accepted only if its ellipsoid belongs to the selected body (semi-major-axis ranges in
+  `services/planet_registry.py`): WGS 84 is rejected for Mars, a Mars CRS is rejected for the Moon;
+* a WMTS layer is only overlaid when its TileMatrixSet CRS equals its body's map CRS (`UNSUPPORTED_CRS` otherwise);
+* DEMs carry a `planet`; terrain queries only consider DEMs of the queried body;
+* scale bars use the body's own reference figure (Moon 10.7 km/px vs Mercury 15.0 km/px at the same zoom, checked);
+* longitudes are normalised to east-positive −180…180 on input; west-positive values are only converted by explicit functions.
+
+### Earth specifics
+* Points picked on the Web-Mercator map are converted to geographic WGS 84 (EPSG:4326) before any API call.
+* Copernicus DEM heights refer to EGM2008 (EPSG:3855), GEBCO to mean sea level, Cesium terrain heights shown in the
+  3D globe are Cesium `Cartographic` heights (relative to the WGS 84 ellipsoid).
+* Map distance measurement in 2D uses `ol/sphere` (sphere R = 6 371 008.8 m, error ≲ 0.5 %); in 3D, Cesium
+  `EllipsoidGeodesic` on WGS 84.

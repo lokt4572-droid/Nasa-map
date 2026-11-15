@@ -1,12 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Feature from "ol/Feature";
 import Point from "ol/geom/Point";
+import Polygon from "ol/geom/Polygon";
+import VectorLayer from "ol/layer/Vector";
+import VectorSource from "ol/source/Vector";
 import type TileLayer from "ol/layer/Tile";
 import type WMTS from "ol/source/WMTS";
 import { Circle as CircleStyle, Fill, RegularShape, Stroke, Style, Text } from "ol/style";
 
-import { MARS_LAYERS } from "../../config/mapLayers";
-import { TREK_DECLARED_CRS, normalizeLon180 } from "../../config/marsProjection";
+import { layersForPlanet } from "../../config/mapLayers";
+import { normalizeLon180 } from "../../config/marsProjection";
+import { PLANETS } from "../../config/planetRegistry";
 import { describeError } from "../../services/api";
 import {
   WmtsLayerError,
@@ -16,10 +20,17 @@ import {
   mapController,
   type MarsMapHandle,
 } from "../../services/marsMapService";
+import { autoLayerChanges } from "../../services/adaptiveLayers";
+import { coverageRegions } from "../../services/coverageCatalog";
+import { footprintRings } from "../../services/datasetDiscoveryService";
+import { bufferExtent, type TileLoaderHandle } from "../../services/tileLoader";
 import { useAppStore } from "../../store/useAppStore";
 import type { HazardSeverity } from "../../types/api";
 import MapControls from "./MapControls";
+import MapDiagnostics from "./MapDiagnostics";
+import CoverageExplorer from "./CoverageExplorer";
 import MapLegend from "./MapLegend";
+import { RouteOverlay, TerrainOverlay } from "./MapOverlays";
 
 const SEVERITY_COLOR: Record<HazardSeverity, string> = {
   UNKNOWN: "#9aa3ad",
@@ -76,21 +87,53 @@ function waypointStyle(name: string, kind: string) {
 export default function MarsMap() {
   const targetRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<MarsMapHandle | null>(null);
-  const tileLayers = useRef(new Map<string, { layer: TileLayer<WMTS>; detach: () => void }>());
+  const tileLayers = useRef(new Map<string, { layer: TileLayer<WMTS>; detach: () => void; abort: () => void; prune: TileLoaderHandle["pruneObsolete"] }>());
 
   const layers = useAppStore((s) => s.layers);
   const hazards = useAppStore((s) => s.hazards.data);
   const missions = useAppStore((s) => s.missions.data);
   const activeMissionId = useAppStore((s) => s.activeMissionId);
   const selectedPoint = useAppStore((s) => s.selectedPoint);
+  const [mapReady, setMapReady] = useState(false);
+  // The component is remounted per body (key={planet} in App), so planet is fixed here.
+  const planet = useAppStore.getState().planet;
+  const planetLayers = layersForPlanet(planet);
+
+  // Auto high-resolution mode: switch regional layers on when their coverage is in view and
+  // large enough, off again when it leaves (only layers it switched on itself).
+  const runAutoLayers = () => {
+    const st = useAppStore.getState();
+    const { extent, resolution } = st.view;
+    if (!extent || !resolution) return;
+    const views = Object.fromEntries(
+      planetLayers.map((l) => {
+        const ls = st.layers[l.id];
+        return [l.id, ls && { ...ls, gridResolutions: ls.grid?.resolutionsDegPerPx ?? null }];
+      }),
+    );
+    st.applyAutoLayers(autoLayerChanges(planetLayers, views, extent, resolution, st.settings.autoHighRes));
+  };
 
   // --- map lifecycle
   useEffect(() => {
-    const h = createMarsMap(targetRef.current ?? undefined);
+    const h = createMarsMap(targetRef.current ?? undefined, planet);
     handleRef.current = h;
+    const pending = useAppStore.getState().pendingMapCenter;
+    if (pending) {
+      // e.g. "Open in 2D map" from the 3D globe
+      h.view.setCenter([pending.lon, pending.lat]);
+      h.view.setResolution(pending.resolution ?? 0.02197265625);
+      useAppStore.getState().setPendingMapCenter(null);
+    }
     mapController.setHandle(h);
-    if (import.meta.env.DEV) (window as unknown as { __marsMap?: MarsMapHandle }).__marsMap = h; // dev-only inspection
-    const { setCursor, setView, selectPoint } = useAppStore.getState();
+    setMapReady(true);
+    if (import.meta.env.DEV) Object.assign(window as object, { __marsMap: h, __mapController: mapController }); // dev-only inspection
+    const { setCursor, setView, selectPoint, patchLayer } = useAppStore.getState();
+    // A new map instance has no tile layers yet: reset load state that a previous
+    // instance (e.g. before switching planets) left as "ready", so layers reload here.
+    for (const cfg of planetLayers) {
+      patchLayer(cfg.id, { status: "idle", error: null, errorCode: null, grid: null, tiles: { loading: 0, loaded: 0, errors: 0 } });
+    }
 
     let frame = 0;
     const onMove = (evt: { coordinate: number[]; dragging: boolean }) => {
@@ -109,14 +152,29 @@ export default function MarsMap() {
       selectPoint({
         lon: normalizeLon180(x),
         lat: y,
-        crs: TREK_DECLARED_CRS,
+        crs: PLANETS[planet].mapCrs!,
         layerId: st.activeLayerId,
         pickedAt: new Date().toISOString(),
       });
     };
     const onMoveEnd = () => {
       const v = h.view;
-      setView({ resolution: v.getResolution() ?? 0, centerLat: v.getCenter()?.[1] ?? 0, zoom: v.getZoom() ?? 0 });
+      const size = h.map.getSize();
+      const res = v.getResolution();
+      const extent = size && res ? v.calculateExtent(size) : null;
+      setView({
+        resolution: res ?? 0,
+        centerLat: v.getCenter()?.[1] ?? 0,
+        centerLon: normalizeLon180(v.getCenter()?.[0] ?? 0),
+        zoom: v.getZoom() ?? 0,
+        extent,
+      });
+      if (extent && res) {
+        // Cancel tile downloads the new view no longer needs (OL itself lets them finish).
+        const buffered = bufferExtent(extent, 0.25);
+        tileLayers.current.forEach((l) => l.prune(buffered, res));
+        runAutoLayers();
+      }
     };
     h.map.on("pointermove", onMove);
     h.map.on("singleclick", onClick);
@@ -131,6 +189,7 @@ export default function MarsMap() {
       layersMap.clear();
       h.map.setTarget(undefined);
       mapController.setHandle(null);
+      setMapReady(false);
       handleRef.current = null;
     };
   }, []);
@@ -140,11 +199,13 @@ export default function MarsMap() {
     const h = handleRef.current;
     if (!h) return;
     const { patchLayer } = useAppStore.getState();
-    for (const cfg of MARS_LAYERS) {
+    for (const cfg of planetLayers) {
       const st = layers[cfg.id];
       if (!st) continue;
       const existing = tileLayers.current.get(cfg.id);
       if (existing) {
+        // Hidden layers must not keep NASA Trek connections busy.
+        if (!st.visible && existing.layer.getVisible()) existing.abort();
         existing.layer.setVisible(st.visible);
         existing.layer.setOpacity(st.opacity);
         continue;
@@ -152,14 +213,18 @@ export default function MarsMap() {
       if (st.visible && st.status === "idle") {
         patchLayer(cfg.id, { status: "loading", error: null, errorCode: null });
         loadWmtsLayer(cfg)
-          .then(({ tileLayer, info }) => {
+          .then(({ tileLayer, info, loader }) => {
             if (handleRef.current !== h) return;
             const now = useAppStore.getState().layers[cfg.id]!;
             tileLayer.setVisible(now.visible);
             tileLayer.setOpacity(now.opacity);
             const source = tileLayer.getSource();
-            const detach = source ? attachTileStats(source, (tiles) => patchLayer(cfg.id, { tiles })) : () => {};
-            tileLayers.current.set(cfg.id, { layer: tileLayer, detach });
+            const detachStats = source ? attachTileStats(source, (tiles) => patchLayer(cfg.id, { tiles })) : () => {};
+            const detach = () => {
+              loader.abortAll();
+              detachStats();
+            };
+            tileLayers.current.set(cfg.id, { layer: tileLayer, detach, abort: loader.abortAll, prune: loader.pruneObsolete });
             h.map.addLayer(tileLayer);
             patchLayer(cfg.id, { status: "ready", grid: info });
           })
@@ -173,6 +238,67 @@ export default function MarsMap() {
       }
     }
   }, [layers]);
+
+  const autoHighRes = useAppStore((s) => s.settings.autoHighRes);
+  useEffect(() => {
+    if (mapReady) runAutoLayers();
+  }, [autoHighRes, mapReady]);
+
+  // --- coverage outlines (Coverage Explorer open)
+  const coverageOpen = useAppStore((s) => s.coverageExplorerOpen);
+  const coverageProducts = useAppStore((s) => s.coverageProducts);
+  useEffect(() => {
+    const h = handleRef.current;
+    if (!h || !mapReady) return;
+    const src = new VectorSource();
+    if (coverageOpen) {
+      // Real DTM footprints from the provider catalogue (green = elevation data).
+      for (const p of coverageProducts) {
+        for (const ring of footprintRings(p.footprint)) {
+          const f = new Feature({ geometry: new Polygon([ring]) });
+          f.setStyle(
+            new Style({
+              stroke: new Stroke({ color: "#6fbf73", width: p.level === "LOCAL_HIGH_RESOLUTION" ? 2 : 1.2 }),
+              fill: new Fill({ color: "rgba(111,191,115,0.07)" }),
+            }),
+          );
+          src.addFeature(f);
+        }
+      }
+      for (const r of coverageRegions(planet)) {
+        for (const l of r.datasets) {
+          const b = l.bbox;
+          const f = new Feature({ geometry: new Polygon([[[b.west, b.south], [b.east, b.south], [b.east, b.north], [b.west, b.north], [b.west, b.south]]]) });
+          f.setStyle(
+            new Style({
+              stroke: new Stroke({ color: l.instrument === "HiRISE" ? "#f2a33a" : "#5fb3d9", width: 1.5, lineDash: l.instrument === "HiRISE" ? undefined : [6, 4] }),
+              fill: new Fill({ color: "rgba(242,163,58,0.06)" }),
+            }),
+          );
+          src.addFeature(f);
+        }
+        const label = new Feature({ geometry: new Point([r.center.lon, r.bbox.north]) });
+        label.setStyle(
+          new Style({
+            text: new Text({
+              text: r.name,
+              offsetY: -10,
+              font: "600 11px Inter, system-ui, sans-serif",
+              fill: new Fill({ color: "#f3efe9" }),
+              stroke: new Stroke({ color: "#14161a", width: 3 }),
+            }),
+            image: new CircleStyle({ radius: 3, fill: new Fill({ color: "#f2a33a" }) }),
+          }),
+        );
+        src.addFeature(label);
+      }
+    }
+    const layer = new VectorLayer({ source: src, zIndex: 99, properties: { role: "coverage" } });
+    h.map.addLayer(layer);
+    return () => {
+      h.map.removeLayer(layer);
+    };
+  }, [coverageOpen, mapReady, coverageProducts]);
 
   // --- hazards
   useEffect(() => {
@@ -212,13 +338,17 @@ export default function MarsMap() {
     }
   }, [selectedPoint]);
 
-  const failed = MARS_LAYERS.filter((l) => layers[l.id]?.visible && layers[l.id]?.status === "error");
+  const failed = planetLayers.filter((l) => layers[l.id]?.visible && layers[l.id]?.status === "error");
 
   return (
     <div className="map-wrap">
       <div ref={targetRef} className="map-target" data-testid="mars-map" aria-label="Map of Mars" />
       <MapControls />
+      {mapReady && <TerrainOverlay />}
+      {mapReady && <RouteOverlay />}
       <MapLegend />
+      <MapDiagnostics planetId={planet} />
+      <CoverageExplorer />
       {failed.length > 0 && (
         <div className="map-error" role="alert">
           {failed.map((l) => (

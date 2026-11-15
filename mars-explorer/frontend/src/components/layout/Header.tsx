@@ -1,36 +1,52 @@
 import { getLayerConfig } from "../../config/mapLayers";
+import PlanetSwitcher from "./PlanetSwitcher";
+import { useEffect, useState } from "react";
+import { onServiceWorkerStatus, serviceWorkerStatus } from "../../offline/serviceWorker";
 import { formatLat, formatLon } from "../../config/marsProjection";
 import { useOnlineStatus } from "../../hooks/useBackendData";
 import { API_BASE_URL } from "../../services/api";
+import { hrefFor, navigate } from "../../routes";
 import { useAppStore } from "../../store/useAppStore";
 
 export default function Header() {
   const backend = useAppStore((s) => s.backend);
   const cursor = useAppStore((s) => s.cursor);
-  const activeLayer = getLayerConfig(useAppStore((s) => s.activeLayerId));
+  const activeLayerId = useAppStore((s) => s.activeLayerId);
+  const activeLayer = activeLayerId ? getLayerConfig(activeLayerId) : null;
   const missions = useAppStore((s) => s.missions.data);
   const activeMissionId = useAppStore((s) => s.activeMissionId);
   const settings = useAppStore((s) => s.settings);
   const setSettings = useAppStore((s) => s.setSettings);
   const online = useOnlineStatus();
+  const [sw, setSw] = useState(serviceWorkerStatus());
+  useEffect(() => onServiceWorkerStatus(setSw), []);
   const mission = missions?.find((m) => m.id === activeMissionId);
 
   const backendLabel = backend.status === "online" ? "API ONLINE" : backend.status === "offline" ? "API OFFLINE" : "API …";
 
   return (
     <header className="header">
-      <div className="header__brand">
-        <img src="/assets/mars-explorer.svg" alt="" width={22} height={22} />
+      <a
+        className="header__brand header__home"
+        href={hrefFor("home")}
+        title="Back to the home page"
+        onClick={(e) => {
+          e.preventDefault();
+          navigate("home");
+        }}
+      >
+        <img src={`${import.meta.env.BASE_URL}assets/mars-explorer.svg`} alt="" width={22} height={22} />
         <span className="brand">MARS EXPLORER</span>
-        <span className="version">v0.1 · technical preview</span>
-      </div>
+        <span className="version">v0.4 · technical preview</span>
+      </a>
+      <PlanetSwitcher />
       <div className="header__item">
         <span className="label">Expedition</span>
         <span>{mission ? `${mission.name}${mission.demo_mode ? " (DEMO)" : ""}` : "none selected"}</span>
       </div>
       <div className="header__item">
         <span className="label">Layer</span>
-        <span>{activeLayer.name}</span>
+        <span>{activeLayer?.name ?? "—"}</span>
       </div>
       <div className="header__item header__cursor">
         <span className="label">Cursor</span>
@@ -44,6 +60,10 @@ export default function Header() {
       <div className="header__item header__item--keep" title={backend.error ?? `Backend: ${API_BASE_URL}`}>
         <span className={`dot ${backend.status === "online" ? "dot--ok" : backend.status === "offline" ? "dot--err" : "dot--unk"}`} />
         <span>{backendLabel}</span>
+      </div>
+      <div className="header__item" title={`Service worker: ${sw}. App shell may be cached; map tiles and live data still need the network.`}>
+        <span className="dot dot--unk" />
+        <span>OFFLINE READY: NO</span>
       </div>
       <div className="header__item" title="No astronaut positioning hardware is connected">
         <span className="dot dot--unk" />

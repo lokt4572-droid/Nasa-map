@@ -81,3 +81,43 @@ lives in a very deep folder, Windows can fail with
 If `pip install rasterio` cannot find a wheel for a brand-new Python version, use the
 newest Python that rasterio publishes wheels for (check https://pypi.org/project/rasterio/#files)
 in a separate venv. The core Django install is independent of this.
+
+---
+
+## v0.2 additions
+
+### One-click start
+Double-click `START-MARS-EXPLORER.bat` (or the Desktop shortcut). It installs missing dependencies, applies migrations,
+starts both servers in minimized windows and opens http://127.0.0.1:5173. Stop with `STOP-MARS-EXPLORER.bat`.
+After pulling v0.2, run `python manage.py migrate` once (the launcher does it automatically).
+
+### New backend variables (`backend/.env`, all optional — defaults shown in `.env.example`)
+| Variable | Purpose |
+|---|---|
+| `HTTP_USER_AGENT` | identifies the app to OSM/Nominatim (required by their policy) |
+| `NOMINATIM_URL` | switch to an own Nominatim instance |
+| `OPEN_METEO_URL`, `NASA_POWER_URL` | provider endpoints |
+| `MAX_REGISTER_FILE_BYTES` | size limit for registering files through the API (default 500 MB) |
+| `FRONTEND_ORIGIN` | now `http://127.0.0.1:5173,http://localhost:5173` |
+
+No API key is needed for NASA Trek, GIBS, POWER, Open-Meteo (free tier) or Nominatim.
+
+### Frontend variables (`frontend/.env.local`)
+| Variable | Purpose |
+|---|---|
+| `VITE_API_BASE_URL` | backend URL (default `http://127.0.0.1:8000/api/v1`) |
+| `VITE_TREK_WMTS_BASE` | NASA Trek base for Mars (`https://trek.nasa.gov/tiles/Mars/EQ`) |
+| `VITE_CESIUM_ION_TOKEN` | optional Cesium ion token for real 3D terrain. **Public in the browser**: restrict it to your domain and never commit it |
+
+### DEM placement
+* Mars: `data/mars/raw/mola/` (real MOLA `megt90n000cb` already imported as `mola-global`), `raw/hirise/`
+* Other bodies: any folder under `data/mars/` (the data root), e.g. `data/mars/raw/moon/`, `raw/mercury/`, `raw/earth/`,
+  then `python manage.py import_dem --planet MOON|MERCURY|EARTH|VENUS --file … --name … --vertical-datum …`.
+* GIBS capabilities cache: `data/cache/` (git-ignored, regenerated automatically).
+
+### Tests
+```powershell
+cd backend; .venv\Scripts\Activate.ps1; python manage.py check; python manage.py test     # 130 tests
+cd ..\frontend; npm test; npm run build                                                    # 78 tests
+```
+Unit tests mock external providers. Live checks: `GET /api/v1/health/sources/?refresh=1`.

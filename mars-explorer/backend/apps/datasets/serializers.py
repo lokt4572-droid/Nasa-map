@@ -2,6 +2,8 @@ from pathlib import Path
 
 from rest_framework import serializers
 
+from services import remote_raster
+
 from .models import Dataset
 
 
@@ -14,7 +16,7 @@ class DatasetSerializer(serializers.ModelSerializer):
         read_only_fields = [f.name for f in Dataset._meta.fields]
 
     def get_file_exists(self, obj: Dataset) -> bool:
-        return Path(obj.file_path).is_file()
+        return remote_raster.file_available(obj.file_path)
 
 
 class DatasetMetadataSerializer(serializers.ModelSerializer):
@@ -28,6 +30,7 @@ class DatasetRegisterSerializer(serializers.Serializer):
 
     file_path = serializers.CharField(max_length=1024, help_text="Path relative to MARS_DATA_DIR, e.g. raw/mola/file.xml")
     name = serializers.SlugField(max_length=120)
+    planet = serializers.ChoiceField(choices=["MARS", "EARTH", "MOON", "MERCURY", "VENUS"], default="MARS")
     source = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     instrument = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
     product_id = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")

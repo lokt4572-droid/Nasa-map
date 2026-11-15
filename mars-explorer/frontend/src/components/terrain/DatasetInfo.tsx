@@ -27,7 +27,7 @@ export default function DatasetInfo() {
           {cfg.mission} / {cfg.instrument}
         </dd>
         <dt>Data kind</dt>
-        <dd>{cfg.dataKind === "COLOR_HILLSHADE" ? "Colour hillshade (visualization)" : "Orthoimage"} — not elevation data</dd>
+        <dd>{cfg.dataKind === "COLOR_HILLSHADE" ? "Colour hillshade (visualization)" : cfg.dataKind === "THERMAL_IR_MOSAIC" ? "Thermal-infrared mosaic" : "Orthoimage"} — not elevation data</dd>
         <dt>Stated resolution</dt>
         <dd>{cfg.resolution ?? "not stated"}</dd>
         <dt>Coverage (W, S, E, N)</dt>

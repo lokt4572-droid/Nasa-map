@@ -2,4 +2,8 @@ from django.urls import path
 
 from . import views
 
-urlpatterns = [path("health/", views.health, name="health")]
+urlpatterns = [
+    path("health/", views.health, name="health"),
+    path("health/sources/", views.health_sources, name="health-sources"),
+    path("health/providers/", views.health_sources, name="health-providers"),
+]

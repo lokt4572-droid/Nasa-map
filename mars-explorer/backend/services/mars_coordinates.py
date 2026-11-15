@@ -76,6 +76,20 @@ CRS_ALIASES: dict[str, CRSAlias] = {
             "by explicit project configuration."
         ),
     ),
+    # Moon: Trek declares urn:ogc:def:crs:EPSG::104903 (checked 2026-11-14); EPSG has no
+    # such code, ESRI:104903 is GCS_Moon_2000 (sphere R = 1 737 400 m).
+    "urn:ogc:def:crs:EPSG::104903": CRSAlias(
+        requested="urn:ogc:def:crs:EPSG::104903",
+        resolved_as="ESRI:104903",
+        reason="NASA Moon Trek declares EPSG::104903 (not in EPSG). Interpreted as ESRI:104903 GCS_Moon_2000.",
+    ),
+    # Mercury: Trek declares the IAU 2000 namespace; PROJ only ships IAU_2015. Same code,
+    # but the 2015 radius (2 440 530 m) may differ from the 2000 value used by the service.
+    "urn:ogc:def:crs:IAU2000::19900": CRSAlias(
+        requested="urn:ogc:def:crs:IAU2000::19900",
+        resolved_as="IAU_2015:19900",
+        reason="NASA Mercury Trek declares IAU2000:19900; PROJ only has IAU_2015:19900 (radius 2 440 530 m).",
+    ),
 }
 
 
@@ -146,8 +160,11 @@ def prime_vertical_radius_m(lat_g_deg: float, a: float = MARS_EQUATORIAL_RADIUS_
     return a / math.sqrt(1 - e2 * s * s)
 
 
-def resolve_crs(identifier: str):
-    """Return (pyproj.CRS, CRSAlias | None). Raises UnknownCRSError, never guesses."""
+def resolve_crs(identifier: str, planet: str = "MARS"):
+    """Return (pyproj.CRS, CRSAlias | None). Raises UnknownCRSError, never guesses.
+
+    The CRS must describe ``planet`` (default Mars): e.g. WGS84 is rejected for Mars and a
+    Mars CRS is rejected for the Moon."""
     from pyproj import CRS
     from pyproj.exceptions import CRSError
 
@@ -162,20 +179,24 @@ def resolve_crs(identifier: str):
         raise UnknownCRSError(f"Cannot resolve CRS {identifier!r}: {exc}") from exc
     if crs.ellipsoid is None:
         raise UnknownCRSError(f"CRS {identifier!r} has no ellipsoid definition")
-    if not is_mars_crs(crs):
+    from services.planet_registry import UnknownPlanetError, crs_matches_planet, get_planet
+
+    try:
+        body = get_planet(planet)
+    except UnknownPlanetError as exc:
+        raise UnknownCRSError(str(exc)) from exc
+    if not crs_matches_planet(crs, body.id):
         raise UnknownCRSError(
-            f"CRS {identifier!r} ({crs.name}) does not describe Mars "
+            f"CRS {identifier!r} ({crs.name}) does not describe {body.name.split(' ')[0]} "
             f"(semi-major axis {crs.ellipsoid.semi_major_metre} m)"
         )
     return crs, alias
 
 
 def is_mars_crs(crs) -> bool:
-    if crs.ellipsoid is None:
-        return False
-    a = crs.ellipsoid.semi_major_metre
-    # Mars reference radii in use are ~3396000–3397000 m. Earth is ~6378137 m.
-    return 3_390_000.0 <= a <= 3_400_000.0
+    from services.planet_registry import crs_matches_planet
+
+    return crs_matches_planet(crs, "MARS")
 
 
 def transform_point(x: float, y: float, src_crs, dst_crs) -> tuple[float, float]:

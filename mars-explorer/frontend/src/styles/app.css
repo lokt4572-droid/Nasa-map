@@ -404,3 +404,5 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .lt3d--split { position: fixed; z-index: 50; top: 60px; bottom: 40px; right: 16px; left: max(50%, 420px); overflow-y: auto; margin: 0; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
 @media (max-width: 760px) { .lt3d--split { left: 16px; top: 50%; } }
 .loc-actions { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.registry-scroll { max-height: 360px; overflow: auto; margin-top: 6px; }
+.registry-scroll .cmp-table td { vertical-align: top; }

@@ -1,7 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useRefreshers } from "../../hooks/useBackendData";
-import { ApiError, describeError, fieldErrors } from "../../services/api";
+import { ApiError, apiRequest, describeError, fieldErrors } from "../../services/api";
 import { type CatalogEntry, type ImportStep, getCatalog, registerDataset } from "../../services/datasetService";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -227,6 +227,124 @@ export default function DataManager() {
           {m}
         </div>
       ))}
+      <DataRegistry />
+    </div>
+  );
+}
+
+interface RegistryRecord {
+  planet_id: string;
+  dataset_id: string;
+  provider: string;
+  product_id: string;
+  data_type: string;
+  resolution_m: number | null;
+  resolution_text: string | null;
+  effective_accuracy: string;
+  coverage: string | null;
+  crs: string | null;
+  vertical_datum: string | null;
+  license: string | null;
+  status: string;
+  source_url: string | null;
+}
+interface RegistryResponse {
+  datasets: RegistryRecord[];
+  adapters: Record<string, { protocol: string; status: string; used_for: string; reason?: string }>;
+  note: string;
+}
+
+/** Unified registry: every dataset of the current body from every provider, one vocabulary. */
+function DataRegistry() {
+  const planet = useAppStore((s) => s.planet);
+  const online = useAppStore((s) => s.backend.status === "online");
+  const [reg, setReg] = useState<{ data: RegistryResponse | null; error: string | null }>({ data: null, error: null });
+  const [provider, setProvider] = useState("ALL");
+  useEffect(() => {
+    if (!online) return;
+    let alive = true;
+    apiRequest<RegistryResponse>("/datasets/registry/", { query: { planet } })
+      .then((data) => alive && setReg({ data, error: null }))
+      .catch((err: unknown) => alive && setReg({ data: null, error: describeError(err) }));
+    return () => {
+      alive = false;
+    };
+  }, [planet, online]);
+  const rows = (reg.data?.datasets ?? []).filter((r) => provider === "ALL" || r.provider === provider);
+  const providers = [...new Set((reg.data?.datasets ?? []).map((r) => r.provider))];
+  return (
+    <div className="card" data-testid="data-registry">
+      <strong>Data registry — {planet}</strong>
+      {reg.error && <div className="error-text small">{reg.error}</div>}
+      {reg.data && (
+        <>
+          <div className="hint small">{reg.data.note}</div>
+          <label className="small">
+            Provider{" "}
+            <select value={provider} onChange={(e) => setProvider(e.target.value)}>
+              <option value="ALL">all ({reg.data.datasets.length})</option>
+              {providers.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="registry-scroll">
+            <table className="cmp-table">
+              <thead>
+                <tr>
+                  <th>Dataset</th>
+                  <th>Provider</th>
+                  <th>Type</th>
+                  <th>Resolution</th>
+                  <th>Accuracy</th>
+                  <th>Datum</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={`${r.provider}:${r.dataset_id}`}>
+                    <td title={`${r.product_id}
+${r.coverage ?? ""}
+${r.crs ?? ""}
+${r.license ?? ""}`}>
+                      {r.source_url ? (
+                        <a href={r.source_url} target="_blank" rel="noreferrer">
+                          {r.dataset_id}
+                        </a>
+                      ) : (
+                        r.dataset_id
+                      )}
+                    </td>
+                    <td className="mono small">{r.provider}</td>
+                    <td className="small">{r.data_type}</td>
+                    <td className="small">{r.resolution_text ?? (r.resolution_m ? `${r.resolution_m} m` : "—")}</td>
+                    <td className="small">{r.effective_accuracy.replaceAll("_", " ").toLowerCase()}</td>
+                    <td className="small">{r.vertical_datum ?? "—"}</td>
+                    <td className="small">{r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <details className="small">
+            <summary>Provider adapters</summary>
+            <dl className="dl">
+              {Object.entries(reg.data.adapters).map(([k, a]) => (
+                <span key={k} style={{ display: "contents" }}>
+                  <dt className="mono">{k}</dt>
+                  <dd>
+                    <span className={`status-chip ${a.status.startsWith("IMPLEMENTED") ? "status-chip--ready" : "status-chip--t-no-data"}`}>{a.status}</span> {a.protocol}. {a.used_for}
+                    {a.reason ? ` — ${a.reason}` : ""}
+                  </dd>
+                </span>
+              ))}
+            </dl>
+          </details>
+        </>
+      )}
     </div>
   );
 }

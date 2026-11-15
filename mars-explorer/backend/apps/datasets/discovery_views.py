@@ -161,3 +161,18 @@ def planet_coverage(request, planet_id: str):
         "remote_dem_access": "ENABLED" if remote_raster.remote_enabled() else "DISABLED",
         "note": "Global coverage of an imaging instrument does not imply DEM coverage: DTMs exist only inside listed footprints.",
     })
+
+
+@api_view(["GET"])
+def data_registry(request):
+    """GET datasets/registry/?planet=&provider=&data_type= — unified dataset records and adapters."""
+    from services import data_registry as reg
+
+    qp = request.query_params
+    planet = _planet(qp.get("planet"))
+    provider = (qp.get("provider") or "").upper() or None
+    if provider and provider not in reg.ADAPTERS:
+        raise ApiError(f"provider must be one of {', '.join(reg.ADAPTERS)}", code="VALIDATION_ERROR")
+    records = reg.registry(planet, provider, (qp.get("data_type") or "").upper() or None)
+    return Response({"planet": planet, "fields": reg.FIELDS, "count": len(records), "datasets": records, "adapters": reg.ADAPTERS,
+                     "note": "Resolution is grid spacing, not accuracy. effective_accuracy is NOT_DOCUMENTED unless the source states it."})

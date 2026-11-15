@@ -1,0 +1,476 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+.rover-page {
+    min-height: 100vh;
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(ellipse at 75% 45%, rgba(174, 77, 43, 0.16), transparent 45%),
+        #11100f;
+    color: #f3eee7;
+    font-family: 'DM Sans', sans-serif;
+    padding: 0 7%;
+}
+
+.rover-nav {
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.rover-logo {
+    color: #f3eee7;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+
+.rover-logo span {
+    color: #e36b43;
+}
+
+.rover-page-number,
+.rover-status {
+    color: #a8a19a;
+    font-size: 11px;
+    letter-spacing: 2px;
+}
+
+.rover-status {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.rover-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #8bc58c;
+    box-shadow: 0 0 12px #8bc58c;
+}
+
+.rover-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 90px 0 70px;
+}
+
+.rover-heading {
+    max-width: 650px;
+}
+
+.rover-eyebrow {
+    color: #e17a52;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+}
+
+.rover-heading h1 {
+    margin: 24px 0;
+    font-family: 'Manrope', sans-serif;
+    font-size: clamp(55px, 8vw, 105px);
+    line-height: 0.95;
+    font-weight: 800;
+    letter-spacing: -5px;
+}
+
+.rover-heading h1 span {
+    color: #dc704a;
+}
+
+.rover-description {
+    max-width: 460px;
+    color: #aaa29a;
+    font-size: 16px;
+    line-height: 1.8;
+}
+
+.rover-info {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 25px;
+    padding: 30px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.rover-info div {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rover-info-label {
+    color: #e17a52;
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+.rover-info strong {
+    color: #e9e2da;
+    font-size: 12px;
+    letter-spacing: 1px;
+}
+
+.rover-next-button {
+    margin-top: 40px;
+    padding: 18px 25px;
+    display: flex;
+    align-items: center;
+    gap: 35px;
+    border: none;
+    background: #d96d47;
+    color: white;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    transition: background 0.25s, transform 0.25s;
+}
+
+.rover-next-button:hover {
+    background: #ed8058;
+    transform: translateY(-3px);
+}
+
+.rover-next-button span {
+    font-size: 18px;
+}
+
+@media (max-width: 700px) {
+    .rover-page {
+        padding: 0 5%;
+    }
+
+    .rover-nav {
+        height: 70px;
+    }
+
+    .rover-page-number {
+        display: none;
+    }
+
+    .rover-content {
+        padding-top: 65px;
+    }
+
+    .rover-heading h1 {
+        letter-spacing: -3px;
+    }
+
+    .rover-info {
+        grid-template-columns: 1fr;
+        gap: 25px;
+    }
+}
+
+.rover-image {
+    position: relative;
+    width: 100%;
+    height: 650px;
+    margin: 55px 0 35px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background:
+        radial-gradient(ellipse, #59402e, #171311 75%);
+    border: 1px solid rgba(220, 112, 74, 0.3);
+}
+
+.rover-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    transition: transform 0.6s ease;
+}
+
+.rover-image:hover img {
+    transform: scale(1.03);
+}
+
+.rover-image span {
+    position: absolute;
+    bottom: 20px;
+    left: 22px;
+    color: white;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-shadow: 0 2px 8px black;
+}
+
+/* ==============================
+   ROVER SPECIFICATIONS FORM
+============================== */
+
+.rover-specifications,
+.rover-saved {
+    margin-top: 90px;
+    padding: 40px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(220, 112, 74, 0.25);
+    border-radius: 8px;
+}
+
+.rover-specifications h2,
+.rover-saved h2 {
+    margin: 15px 0 35px;
+    color: #f1e5dc;
+    font-size: clamp(24px, 4vw, 36px);
+    letter-spacing: 2px;
+}
+
+.rover-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 25px;
+}
+
+.rover-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: #c9a895;
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.rover-form input,
+.rover-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 17px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(220, 112, 74, 0.3);
+    border-radius: 4px;
+    outline: none;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 15px;
+    transition: border-color 0.3s, background 0.3s;
+}
+
+.rover-form input:focus,
+.rover-form textarea:focus {
+    border-color: #e58a55;
+    background: rgba(229, 138, 85, 0.06);
+}
+
+.rover-form input::placeholder,
+.rover-form textarea::placeholder {
+    color: #76665d;
+}
+
+.rover-description-field {
+    grid-column: 1 / -1;
+}
+
+.rover-form textarea {
+    min-height: 130px;
+    resize: vertical;
+}
+
+.rover-form .rover-next-button {
+    grid-column: 1 / -1;
+    width: fit-content;
+    cursor: pointer;
+}
+
+.rover-saved {
+    animation: rover-appear 0.5s ease;
+}
+
+.rover-saved .rover-info {
+    margin: 30px 0;
+}
+
+.rover-saved>p:last-child {
+    color: #c9a895;
+    line-height: 1.8;
+}
+
+@keyframes rover-appear {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 700px) {
+
+    .rover-specifications,
+    .rover-saved {
+        padding: 22px;
+    }
+
+    .rover-form {
+        grid-template-columns: 1fr;
+    }
+
+    .rover-description-field,
+    .rover-form .rover-next-button {
+        grid-column: auto;
+    }
+}
+
+/* ==============================
+   ROVER SPECIFICATIONS ANIMATION
+============================== */
+
+@keyframes specReveal {
+    from {
+        opacity: 0;
+        transform: translateY(25px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Form appearance */
+.rover-specifications {
+    animation: specReveal 0.8s ease both;
+}
+
+/* Saved specification cards */
+.rover-saved .rover-info>div {
+    opacity: 0;
+    animation: specReveal 0.7s ease forwards;
+}
+
+.rover-saved .rover-info>div:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.rover-saved .rover-info>div:nth-child(2) {
+    animation-delay: 0.25s;
+}
+
+.rover-saved .rover-info>div:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+/* Respect reduced-motion settings */
+@media (prefers-reduced-motion: reduce) {
+
+    .rover-specifications,
+    .rover-saved .rover-info>div {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.rover-edit-button {
+    padding: 14px 22px;
+    margin-bottom: 25px;
+    background: transparent;
+    border: 1px solid #e58a55;
+    color: #e58a55;
+    font-size: 11px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.rover-edit-button:hover {
+    background: #e58a55;
+    color: #171311;
+}
+
+/* ==============================
+   ROVER SYSTEMS
+============================== */
+
+.rover-systems {
+    margin-top: 100px;
+    padding: 45px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(220, 112, 74, 0.25);
+    border-radius: 8px;
+}
+
+.rover-systems h2 {
+    margin: 15px 0 40px;
+    color: #f1e5dc;
+    font-size: clamp(28px, 4vw, 42px);
+    letter-spacing: 3px;
+}
+
+.rover-systems-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.rover-system-card {
+    padding: 30px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(220, 112, 74, 0.2);
+    transition: transform 0.35s ease, border-color 0.35s ease;
+}
+
+.rover-system-card:hover {
+    transform: translateY(-7px);
+    border-color: #e58a55;
+}
+
+.rover-system-card span {
+    color: #e58a55;
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+.rover-system-card h3 {
+    margin: 22px 0 14px;
+    color: #f1e5dc;
+    font-size: 19px;
+    letter-spacing: 1.5px;
+}
+
+.rover-system-card p {
+    color: #b8a398;
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+@media (max-width: 700px) {
+    .rover-systems {
+        padding: 22px;
+    }
+
+    .rover-systems-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .rover-specifications,
+    .rover-saved,
+    .rover-saved .rover-info>div {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (max-width: 700px) {
+    .rover-image {
+        height: 350px;
+    }
+}

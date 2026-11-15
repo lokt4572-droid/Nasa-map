@@ -60,7 +60,7 @@ export default function RoverProfile({ onNext }: RoverProfileProps) {
         <div className="rover-page">
             <nav className="rover-nav">
                 <a href="#" className="rover-logo">
-                    MARS<span>.</span>EXPLORER
+                    NOVA
                 </a>
 
                 <span className="rover-page-number">02 / 03</span>

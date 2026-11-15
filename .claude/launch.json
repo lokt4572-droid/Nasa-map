@@ -4,14 +4,38 @@
     {
       "name": "backend",
       "runtimeExecutable": "mars-explorer/backend/.venv/Scripts/python.exe",
-      "runtimeArgs": ["mars-explorer/backend/manage.py", "runserver", "127.0.0.1:8000", "--noreload"],
+      "runtimeArgs": [
+        "mars-explorer/backend/manage.py",
+        "runserver",
+        "127.0.0.1:8000",
+        "--noreload"
+      ],
       "port": 8000
     },
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "mars-explorer/frontend", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "mars-explorer/frontend",
+        "run",
+        "dev"
+      ],
       "port": 5173
+    },
+    {
+      "name": "frontend-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "mars-explorer/frontend",
+        "run",
+        "preview",
+        "--",
+        "--port",
+        "4173"
+      ],
+      "port": 4173
     }
   ]
 }

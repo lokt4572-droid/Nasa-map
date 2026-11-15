@@ -17,7 +17,7 @@ from services.mars_coordinates import resolve_crs
 from services.planet_registry import UnknownPlanetError, get_planet
 
 from .models import Dataset
-from .services import coverage_service, dataset_discovery, stac_client
+from .services import catalogues, coverage_service, dataset_discovery
 
 QUALITY_RANK = {"LARGE_GAPS": 0, "NOT_DOCUMENTED": 1, "PARTIAL_GAPS": 2, "MOSTLY_COMPLETE": 3}
 DATA_TYPES = {"DEM", "ORTHOIMAGE"}
@@ -73,16 +73,16 @@ def _search(request, planet: str) -> Response:
     min_q = (qp.get("minimum_quality") or "").upper()
     if min_q and min_q not in QUALITY_RANK:
         raise ApiError(f"minimum_quality must be one of {', '.join(QUALITY_RANK)}", code="VALIDATION_ERROR")
-    limit = int(_float(qp, "limit", 1, stac_client.MAX_LIMIT) or 50)
-    provider = {"name": stac_client.PROVIDER, "status": "OK"}
+    limit = int(_float(qp, "limit", 1, catalogues.MAX_LIMIT) or 50)
+    provider = {"name": catalogues.provider_name(planet), "status": "OK"}
     products: list[dict] = []
     matched, truncated = 0, False
-    if not stac_client.collections_for(planet, data_type):
+    if not catalogues.collections_for(planet, data_type):
         provider["status"] = "NO_CATALOGUE_FOR_BODY"
     else:
         try:
-            found = stac_client.search(planet, bbox=bbox, point=point, data_type=data_type, max_resolution_m=max_res, limit=limit)
-        except stac_client.StacError as exc:
+            found = catalogues.search(planet, bbox=bbox, point=point, data_type=data_type, max_resolution_m=max_res, limit=limit)
+        except catalogues.StacError as exc:
             raise ApiError(str(exc), code=exc.code, status_code=504 if exc.code == "PROVIDER_TIMEOUT" else 502) from exc
         products, matched, truncated = found["products"], found["matched"], found["truncated"]
     if min_q:
@@ -132,9 +132,9 @@ def register_remote(request):
     if not collection or not product_id or len(product_id) > 200:
         raise ApiError("collection and product_id are required", code="VALIDATION_ERROR")
     try:
-        product = stac_client.get_product(collection, product_id)
+        product = catalogues.get_product(collection, product_id)
         ds = dataset_discovery.register_remote_dem(product)
-    except stac_client.StacError as exc:
+    except catalogues.StacError as exc:
         raise ApiError(str(exc), code=exc.code, status_code=404 if exc.code == "NOT_FOUND" else 502) from exc
     except dataset_discovery.DiscoveryError as exc:
         http = {"REMOTE_DEM_DISABLED": 503, "DEM_READ_ERROR": 502}.get(exc.code, 422)
@@ -149,14 +149,30 @@ def planet_coverage(request, planet_id: str):
     levels: dict[str, list] = {lv: [] for lv in coverage_service.LEVELS}
     for ds in Dataset.objects.filter(planet=planet, status=Dataset.Status.VALID):
         levels[coverage_service.level_for_resolution(ds.resolution_meters)].append(coverage_service.local_record(ds))
-    catalogues = [
+    catalogue_list = [
         {"collection": c.id, "instrument": c.instrument, "data_type": c.data_type, "level": c.level,
-         "provider": stac_client.PROVIDER, "vertical_datum": c.vertical_datum, "units": c.units,
-         "docs_url": c.docs_url, "notes": c.notes, "coverage": "LOCAL_FOOTPRINTS — search by area", "license": "CC0-1.0"}
-        for c in stac_client.collections_for(planet)
+         "provider": catalogues.provider_name(planet), "vertical_datum": c.vertical_datum, "units": c.units,
+         "docs_url": c.docs_url, "notes": c.notes, "coverage": "FOOTPRINTS — search by area",
+         "license": "Copernicus DEM licence (free use with attribution)" if planet == "EARTH" else "CC0-1.0"}
+        for c in catalogues.collections_for(planet)
     ]
     return Response({
-        "planet": planet, "levels": levels, "catalogues": catalogues,
+        "planet": planet, "levels": levels, "catalogues": catalogue_list,
         "remote_dem_access": "ENABLED" if remote_raster.remote_enabled() else "DISABLED",
         "note": "Global coverage of an imaging instrument does not imply DEM coverage: DTMs exist only inside listed footprints.",
     })
+
+
+@api_view(["GET"])
+def data_registry(request):
+    """GET datasets/registry/?planet=&provider=&data_type= — unified dataset records and adapters."""
+    from services import data_registry as reg
+
+    qp = request.query_params
+    planet = _planet(qp.get("planet"))
+    provider = (qp.get("provider") or "").upper() or None
+    if provider and provider not in reg.ADAPTERS:
+        raise ApiError(f"provider must be one of {', '.join(reg.ADAPTERS)}", code="VALIDATION_ERROR")
+    records = reg.registry(planet, provider, (qp.get("data_type") or "").upper() or None)
+    return Response({"planet": planet, "fields": reg.FIELDS, "count": len(records), "datasets": records, "adapters": reg.ADAPTERS,
+                     "note": "Resolution is grid spacing, not accuracy. effective_accuracy is NOT_DOCUMENTED unless the source states it."})

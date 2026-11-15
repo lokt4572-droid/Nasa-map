@@ -38,7 +38,9 @@ export default function LocalTerrain3D() {
   const [datasetId, setDatasetId] = useState<number | null>(null);
   const product = useAppStore((s) => s.terrainProduct);
   const [exaggeration, setExaggeration] = useState(1);
-  const [expanded, setExpanded] = useState(false);
+  const layout = useAppStore((s) => s.terrainView);
+  const setLayout = useAppStore((s) => s.setTerrainView);
+  const expanded = layout !== "panel";
   const [state, setState] = useState<State>({ status: "idle" });
 
   // --- load the patch (old requests are cancelled when the point or radius changes)
@@ -69,24 +71,38 @@ export default function LocalTerrain3D() {
 
   useEffect(() => {
     if (!expanded) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setExpanded(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setLayout("panel");
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expanded]);
+  }, [expanded, setLayout]);
+
+  // Outline the patch on the 2D map so the 3D scene can be located on the map.
+  const setPatchBBox = useAppStore((s) => s.setTerrainPatchBBox);
+  useEffect(() => {
+    setPatchBBox(state.status === "ready" ? state.patch.bbox : null);
+  }, [state, setPatchBBox]);
+  useEffect(() => () => setPatchBBox(null), [setPatchBBox]);
 
   if (!point) return null;
 
   return (
-    <section className={`lt3d ${expanded ? "lt3d--expanded" : ""}`} data-testid="local-terrain-3d" aria-label="Local 3D terrain">
+    <section className={`lt3d ${layout === "expanded" ? "lt3d--expanded" : layout === "split" ? "lt3d--split" : ""}`} data-testid="local-terrain-3d" aria-label="Local 3D terrain">
       <div className="lt3d__head">
         <span className="lt3d__title">LOCAL 3D TERRAIN</span>
         <span className="mono muted">
           {formatLat(point.lat, 3)} {formatLon(point.lon, lonMode, 3)}
         </span>
         {state.status === "ready" && (
-          <button className="btn btn--small btn--ghost" onClick={() => setExpanded(!expanded)}>
-            {expanded ? "Close" : "Expand"}
-          </button>
+          <span className="lt3d__layout">
+            {layout !== "split" && (
+              <button className="btn btn--small btn--ghost" onClick={() => setLayout("split")} title="3D on the right, the 2D map stays visible with the patch outlined">
+                2D | 3D
+              </button>
+            )}
+            <button className="btn btn--small btn--ghost" onClick={() => setLayout(expanded ? "panel" : "expanded")}>
+              {expanded ? "Close" : "Expand"}
+            </button>
+          </span>
         )}
       </div>
       {state.status === "loading" && (
@@ -268,6 +284,9 @@ function TerrainScene({
       mat.dispose();
       frame.geometry.dispose();
       renderer.dispose();
+      // dispose() frees buffers and textures but keeps the WebGL context; release it explicitly so
+      // repeated view switches never pile up contexts (browsers cap them at about 16).
+      renderer.forceContextLoss();
       renderer.domElement.remove();
       api.current = null;
     };

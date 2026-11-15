@@ -19,7 +19,7 @@ def health(request):
     return Response(
         {
             "status": "ok" if db_ok else "degraded",
-            "service": "mars-explorer-backend",
+            "service": "nova-backend",
             "version": settings.APP_VERSION,
             "time_utc": timezone.now().isoformat(),
             "database": "ok" if db_ok else "error",

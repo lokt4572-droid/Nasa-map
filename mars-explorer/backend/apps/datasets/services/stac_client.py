@@ -72,6 +72,18 @@ COLLECTIONS: dict[str, StacCollection] = {
             notes=("Stereo DTMs between about 70N and 70S. Provider: mean vertical precision ~3 m, vertical offsets near "
                    "DTM edges; accuracy is reported per DTM (qa_metrics asset)."),
         ),
+        *[
+            StacCollection(
+                id=f"kaguya_terrain_camera_usgs_dtms_v2_{pole}polar", planet="MOON", instrument="Kaguya/SELENE Terrain Camera",
+                data_type="DEM", level="REGIONAL",
+                vertical_datum="LOLA-aligned (provider: 'absolutely aligned to LOLA'); reference surface NOT_DOCUMENTED in the STAC item",
+                units="m", units_source="STAC raster band unit 'meters'",
+                docs_url=f"{DOCS_ROOT}/moon/kaguyatc_dtms/",
+                notes=(f"{pole.title()} polar Kaguya TC v2 DTMs in a polar stereographic projection (about 30 m). Coverage is "
+                       "patchy; permanently shadowed areas can lack stereo coverage."),
+            )
+            for pole in ("south", "north")
+        ],
     ]
 }
 

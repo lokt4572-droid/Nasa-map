@@ -21,7 +21,7 @@ export interface MissionPackageMetadata {
   schema: "mars-explorer/mission-package";
   schemaVersion: number;
   createdAt: string;
-  app: { name: "MARS EXPLORER"; version: string };
+  app: { name: string; version: string };
   coordinateConvention: typeof MAP_COORDINATE_CONVENTION;
   contents: {
     mission: boolean;
@@ -46,7 +46,7 @@ export function buildMissionPackage(mission: Mission, hazards: Hazard[], now = n
       schema: "mars-explorer/mission-package",
       schemaVersion: MISSION_PACKAGE_SCHEMA_VERSION,
       createdAt: now.toISOString(),
-      app: { name: "MARS EXPLORER", version: "0.1.0" },
+      app: { name: "Nova", version: "0.5.0" },
       coordinateConvention: MAP_COORDINATE_CONVENTION,
       contents: {
         mission: true,

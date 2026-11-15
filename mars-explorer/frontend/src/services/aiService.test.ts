@@ -34,3 +34,16 @@ describe("route drawing across the map seam", () => {
     expect(displayParts({ geometry: { coordinates: [[-1, 0], [1, 0]] } })).toHaveLength(1);
   });
 });
+
+describe("comparison table cells", () => {
+  it("keeps a decimal for small values instead of showing 0", async () => {
+    const { fmtCell } = await import("../components/mission/RoutePlanner");
+    expect(fmtCell("roughness_tri_mean_m", 0.2)).toBe("0.2 m");
+    expect(fmtCell("total_ascent_m", 754)).toBe("754 m");
+    expect(fmtCell("distance_m", 1500)).toMatch(/km/);
+    expect(fmtCell("maximum_slope_deg", 10.7)).toBe("10.7°");
+    expect(fmtCell("nodata_pct_along_route", 0)).toBe("0.0%");
+    expect(fmtCell("terrain_cost", 4.2)).toBe("4.2");
+    expect(fmtCell("terrain_cost", null)).toBe("—");
+  });
+});

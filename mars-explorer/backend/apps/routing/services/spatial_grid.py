@@ -16,7 +16,7 @@ from typing import Any
 
 import numpy as np
 
-from services import dem_reader, remote_raster
+from services import dem_reader, remote_raster, window_cache
 
 MAX_GRID_SIDE = 300
 MARGIN_FRACTION = 0.25  # extra area around the points' bounding box
@@ -102,7 +102,7 @@ def unwrap_columns(cols: list[int], width: int) -> list[int]:
     return out
 
 
-def _read_columns(src, c0: int, ww: int, r0: int, wh: int, out_h: int, out_w: int, wrap: bool, fx: int):
+def _read_columns(src, c0: int, ww: int, r0: int, wh: int, out_h: int, out_w: int, wrap: bool, fx: int, path=None):
     """Read columns c0 .. c0+ww-1 (unwrapped indices) as one array of shape (out_h, out_w).
 
     Inside the raster this is one decimated window read. Across the raster's x seam the two
@@ -111,14 +111,14 @@ def _read_columns(src, c0: int, ww: int, r0: int, wh: int, out_h: int, out_w: in
     from rasterio.windows import Window
 
     if not wrap or (c0 >= 0 and c0 + ww <= src.width):
-        return src.read(1, window=Window(c0, r0, ww, wh), out_shape=(out_h, out_w), masked=True)
+        return window_cache.read(src, path or src.name, Window(c0, r0, ww, wh), (out_h, out_w))
     parts = []
     start = c0
     remaining = ww
     while remaining > 0:
         col = start % src.width
         n = min(remaining, src.width - col)
-        parts.append(src.read(1, window=Window(col, r0, n, wh), out_shape=(out_h, max(1, n // fx)), masked=True))
+        parts.append(window_cache.read(src, path or src.name, Window(col, r0, n, wh), (out_h, max(1, n // fx))))
         start += n
         remaining -= n
     return np.ma.concatenate(parts, axis=1)
@@ -179,10 +179,10 @@ def build_grid(ds, points_ds: list[tuple[float, float]], to_query, max_side: int
         out_h = max(2, round(wh / factor))
         native = None
         if factor > 1.0 and wh * ww <= NATIVE_READ_BUDGET:
-            native = _read_columns(src, c0, ww, r0, wh, wh, ww, wrap, 1)
+            native = _read_columns(src, c0, ww, r0, wh, wh, ww, wrap, 1, ds.file_path)
             data = None
         else:
-            data = _read_columns(src, c0, ww, r0, wh, out_h, out_w, wrap, fx)
+            data = _read_columns(src, c0, ww, r0, wh, out_h, out_w, wrap, fx, ds.file_path)
             out_w = data.shape[1]
         scale = float(src.scales[0]) if src.scales else 1.0
         offset = float(src.offsets[0]) if src.offsets else 0.0

@@ -1,4 +1,4 @@
-# MARS EXPLORER — v0.2
+# Nova — planetary GIS (formerly MARS EXPLORER)
 
 Planetary GIS: real NASA maps of **Mars** (default), **Earth**, the **Moon**, **Mercury** and an experimental
 **Venus** preview; real DEM analysis and A* route planning for Mars; Earth satellite imagery, weather, search,

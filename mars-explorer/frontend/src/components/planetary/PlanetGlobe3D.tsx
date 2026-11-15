@@ -235,6 +235,9 @@ export default function PlanetGlobe3D({ planet }: { planet: PlanetId }) {
       unlit.dispose();
       texture?.dispose();
       renderer.dispose();
+      // dispose() frees buffers and textures but keeps the WebGL context; release it explicitly so
+      // repeated view switches never pile up contexts (browsers cap them at about 16).
+      renderer.forceContextLoss();
       el.remove();
       api.current = null;
       useAppStore.getState().setCursor(null);

@@ -17,7 +17,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
       {/* Navigation */}
       <nav className="landing-nav">
         <a className="landing-logo" href="#">
-          MARS<span>.</span>EXPLORER
+          NOVA
         </a>
 
         <div className="landing-nav-links">
@@ -62,7 +62,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
               className="enter-button"
               onClick={onEnter}
             >
-              ENTER MARS EXPLORER
+              ENTER NOVA
               <span>↗</span>
             </button>
 
@@ -123,7 +123,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
       {/* Bottom information */}
       <footer className="landing-footer" id="about">
         <span>HUMANITY'S NEXT GREAT JOURNEY</span>
-        <span>EST. 2026 — MARS EXPLORER</span>
+        <span>EST. 2026 — NOVA</span>
       </footer>
 
     </div>

@@ -9,7 +9,9 @@ export interface GibsInterval {
 
 export interface GibsLayer {
   id: string;
-  group: "SATELLITE" | "ATMOSPHERE" | "PRECIPITATION" | "REFERENCE";
+  group: "SATELLITE" | "ATMOSPHERE" | "PRECIPITATION" | "REFERENCE" | "GEOSTATIONARY";
+  /** Regional coverage statement for layers that are not global (e.g. geostationary discs). */
+  coverage?: string;
   title: string;
   instrument: string;
   platform: string;
@@ -90,7 +92,16 @@ export const getHistorical = (lat: number, lon: number, start: string, end: stri
 /** Is a YYYY-MM-DD date inside one of the published daily intervals? */
 export function dateAvailable(time: GibsLayer["time"], date: string): boolean {
   if (!time) return true;
-  return time.intervals.some((i) => i.start.slice(0, 10) <= date && date <= i.end.slice(0, 10));
+  if (!time.daily && date.length > 10) {
+    const t = Date.parse(date); // a sub-daily timestamp must be one of the published steps
+    return time.intervals.some((i) => {
+      const step = subDailyStepMs(i.period);
+      const a = Date.parse(i.start);
+      return step !== null && t >= a && t <= Date.parse(i.end) && (t - a) % step === 0;
+    });
+  }
+  const d = date.slice(0, 10);
+  return time.intervals.some((i) => i.start.slice(0, 10) <= d && d <= i.end.slice(0, 10));
 }
 
 /** Next/previous available day, skipping gaps between published intervals. */
@@ -105,6 +116,42 @@ export function stepDate(time: GibsLayer["time"], date: string, dir: 1 | -1): st
     if (dateAvailable(time, s)) return s;
   }
   return null;
+}
+
+/** ISO-8601 duration with time part only (e.g. PT10M, PT1H) -> milliseconds; null if not sub-daily. */
+export function subDailyStepMs(period: string): number | null {
+  const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(period);
+  if (!m || (!m[1] && !m[2] && !m[3])) return null;
+  return ((Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0)) * 60 + Number(m[3] ?? 0)) * 1000;
+}
+
+const isoZ = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+
+/** Published sub-daily times (newest first), at most `limit`. Only times inside published intervals. */
+export function subDailyTimes(time: GibsLayer["time"], limit = 144): string[] {
+  if (!time) return [];
+  const out: string[] = [];
+  for (const iv of [...time.intervals].reverse()) {
+    const step = subDailyStepMs(iv.period);
+    const start = Date.parse(iv.start);
+    const end = Date.parse(iv.end);
+    if (!step || !Number.isFinite(start) || !Number.isFinite(end)) continue;
+    for (let t = end; t >= start && out.length < limit; t -= step) out.push(isoZ(t));
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Value for the {Time} placeholder: a published timestamp for sub-daily layers, a day otherwise. */
+export function timeValue(layer: GibsLayer, selected: string | undefined): string | null {
+  const t = layer.time;
+  if (!t) return null;
+  if (!t.daily) {
+    const times = subDailyTimes(t, 100_000);
+    if (selected && times.includes(selected)) return selected;
+    return times[0] ?? null; // latest published step
+  }
+  return (selected ?? t.latest)?.slice(0, 10) ?? null;
 }
 
 /** Build the XYZ template for OpenLayers from the published WMTS REST template. */

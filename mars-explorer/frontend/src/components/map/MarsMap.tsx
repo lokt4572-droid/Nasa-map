@@ -300,6 +300,34 @@ export default function MarsMap() {
     };
   }, [coverageOpen, mapReady, coverageProducts]);
 
+  // --- footprint of the local 3D terrain patch
+  const patchBBox = useAppStore((s) => s.terrainPatchBBox);
+  const terrainView = useAppStore((s) => s.terrainView);
+  // Side by side: frame the patch (with context around it) so the 3D scene can be found on the map.
+  useEffect(() => {
+    if (terrainView !== "split" || !patchBBox || !mapReady) return;
+    const b = patchBBox;
+    const dx = (b.east - b.west) * 1.5;
+    const dy = (b.north - b.south) * 1.5;
+    // Keep the box in the part of the map not covered by the 3D panel (right half of the window).
+    const mapRect = handleRef.current?.map.getTargetElement()?.getBoundingClientRect();
+    const panel = document.querySelector(".lt3d--split")?.getBoundingClientRect();
+    const right = mapRect && panel ? Math.max(40, Math.min(mapRect.right - panel.left + 20, mapRect.width - 120)) : 40;
+    mapController.zoomToBBox({ west: b.west - dx, south: b.south - dy, east: b.east + dx, north: b.north + dy }, [40, right, 40, 40]);
+  }, [terrainView, patchBBox, mapReady]);
+  useEffect(() => {
+    const h = handleRef.current;
+    if (!h || !mapReady || !patchBBox) return;
+    const b = patchBBox;
+    const f = new Feature({ geometry: new Polygon([[[b.west, b.south], [b.east, b.south], [b.east, b.north], [b.west, b.north], [b.west, b.south]]]) });
+    f.setStyle(new Style({ stroke: new Stroke({ color: "#5fb3d9", width: 2, lineDash: [8, 4] }), fill: new Fill({ color: "rgba(95,179,217,0.08)" }) }));
+    const layer = new VectorLayer({ source: new VectorSource({ features: [f] }), zIndex: 104, properties: { role: "terrain-patch" } });
+    h.map.addLayer(layer);
+    return () => {
+      h.map.removeLayer(layer);
+    };
+  }, [patchBBox, mapReady]);
+
   // --- hazards
   useEffect(() => {
     const src = handleRef.current?.hazardSource;

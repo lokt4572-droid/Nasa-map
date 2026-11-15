@@ -3,6 +3,7 @@ import { textureFor } from "../config/planetTextures";
 
 import { ALL_LAYERS, layersForPlanet } from "../config/mapLayers";
 import type { DemProduct } from "../services/datasetDiscoveryService";
+import type { EarthTerrainImage } from "../services/earthTerrainService";
 import type { GibsDiscovery } from "../services/earthService";
 import { DEFAULT_PLANET, type PlanetId } from "../config/planetRegistry";
 import type { TileGridInfo, TileStats } from "../services/marsMapService";
@@ -50,6 +51,17 @@ export interface EarthState {
   measure: { active: boolean; points: [number, number][] };
   view: "2D" | "3D";
   flyTo: { lon: number; lat: number; zoom?: number; bbox?: [number, number, number, number]; seq: number } | null;
+  /** Terrain colours rendered from a real DEM (v0.4: Copernicus GLO-30 tiles). */
+  terrain: EarthTerrainState;
+}
+
+export interface EarthTerrainState {
+  product: "elevation" | "hillshade" | "slope";
+  opacity: number;
+  status: "idle" | "loading" | "ready" | "no-data" | "error";
+  message: string | null;
+  images: EarthTerrainImage[];
+  missingTiles: number;
 }
 
 export type TerrainProduct = "elevation" | "hillshade" | "slope" | "aspect" | "roughness";
@@ -122,6 +134,12 @@ interface AppState {
   /** Catalogue product the user chose for the local 3D terrain ("<collection>/<product_id>"), or null = best available. */
   terrainProduct: string | null;
   setTerrainProduct: (p: string | null) => void;
+  /** Local 3D terrain layout: in the point panel, enlarged, or side by side with the 2D map. */
+  terrainView: "panel" | "expanded" | "split";
+  setTerrainView: (v: "panel" | "expanded" | "split") => void;
+  /** Ground area of the local 3D patch, outlined on the 2D map (lon/lat, map CRS). */
+  terrainPatchBBox: { west: number; south: number; east: number; north: number } | null;
+  setTerrainPatchBBox: (b: AppState["terrainPatchBBox"]) => void;
   setCoverageExplorerOpen: (v: boolean) => void;
   setBodyView: (v: "MAP" | "GLOBE" | "TILES") => void;
   /** centre to apply when the 2D map mounts (e.g. "Open in 2D map" from the globe) */
@@ -231,6 +249,7 @@ export const useAppStore = create<AppState>((set) => ({
     measure: { active: false, points: [] },
     view: "2D",
     flyTo: null,
+    terrain: { product: "hillshade", opacity: 0.75, status: "idle", message: null, images: [], missingTiles: 0 },
   },
 
   bodyView: "MAP",
@@ -240,6 +259,10 @@ export const useAppStore = create<AppState>((set) => ({
   setCoverageProducts: (coverageProducts) => set({ coverageProducts }),
   terrainProduct: null,
   setTerrainProduct: (terrainProduct) => set({ terrainProduct }),
+  terrainView: "panel",
+  setTerrainView: (terrainView) => set({ terrainView }),
+  terrainPatchBBox: null,
+  setTerrainPatchBBox: (terrainPatchBBox) => set({ terrainPatchBBox }),
   setCoverageExplorerOpen: (coverageExplorerOpen) => set({ coverageExplorerOpen }),
   pendingMapCenter: null,
   setPendingMapCenter: (pendingMapCenter) => set({ pendingMapCenter }),
@@ -286,6 +309,8 @@ export const useAppStore = create<AppState>((set) => ({
             pendingMapCenter: null,
             coverageProducts: [],
             terrainProduct: null,
+            terrainView: "panel",
+            terrainPatchBBox: null,
             activeLayerId: defaultLayerFor(planet),
             selectedPoint: null,
             pointInfo: emptyPointInfo(),
@@ -298,7 +323,7 @@ export const useAppStore = create<AppState>((set) => ({
   setCursor: (cursor) => set({ cursor }),
   setView: (view) => set({ view }),
   // A newly selected point starts from the best available DEM, not a previously chosen product.
-  selectPoint: (selectedPoint) => set({ selectedPoint, pointInfo: emptyPointInfo(), terrainProduct: null }),
+  selectPoint: (selectedPoint) => set({ selectedPoint, pointInfo: emptyPointInfo(), terrainProduct: null, terrainPatchBBox: null }),
   setPointInfo: (patch) => set((s) => ({ pointInfo: { ...s.pointInfo, ...patch } })),
   setBackend: (backend) => set({ backend }),
   setMissions: (missions) => set({ missions }),

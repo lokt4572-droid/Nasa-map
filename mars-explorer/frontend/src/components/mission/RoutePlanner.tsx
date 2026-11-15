@@ -68,13 +68,13 @@ function Comparison({ c }: { c: RouteComparison }) {
   );
 }
 
-function fmtCell(key: string, v: number | null | undefined): string {
+export function fmtCell(key: string, v: number | null | undefined): string {
   if (v === null || v === undefined) return "—";
   if (key.endsWith("_m") && key.startsWith("distance")) return formatDistance(v);
   if (key.endsWith("_deg")) return `${v.toFixed(1)}°`;
   if (key.endsWith("_pct") || key.startsWith("nodata")) return `${v.toFixed(1)}%`;
-  if (key.endsWith("_m")) return v >= 1000 ? formatDistance(v) : `${v.toFixed(0)} m`;
-  return v.toFixed(0);
+  if (key.endsWith("_m")) return v >= 1000 ? formatDistance(v) : `${v.toFixed(v < 10 ? 1 : 0)} m`;
+  return v.toFixed(Math.abs(v) < 10 ? 1 : 0);
 }
 
 /** v0.4 comparison: every value is copied from the planner's metrics; labels are neutral. */

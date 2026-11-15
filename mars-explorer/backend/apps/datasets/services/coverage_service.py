@@ -6,7 +6,7 @@ import math
 from services import dataset_manager, remote_raster
 from services.planet_registry import get_planet
 
-from . import dataset_discovery, stac_client
+from . import catalogues, dataset_discovery
 
 LEVELS = ("GLOBAL", "REGIONAL", "LOCAL_HIGH_RESOLUTION")
 
@@ -56,13 +56,13 @@ def at_point(lon: float, lat: float, query_crs, lat_convention: str, planet: str
              if dataset_manager.refresh_file_status(d)]
     records = [local_record(d) for d in local]
     registered_products = {d.product_id for d in local if remote_raster.is_remote(d.file_path)}
-    provider = {"name": stac_client.PROVIDER, "status": "NOT_QUERIED", "collections": []}
-    if include_remote and stac_client.collections_for(planet, "DEM"):
+    provider = {"name": catalogues.provider_name(planet), "status": "NOT_QUERIED", "collections": []}
+    if include_remote and catalogues.collections_for(planet, "DEM"):
         if not remote_raster.remote_enabled():
             provider["status"] = "DISABLED"
         else:
             try:
-                found = stac_client.search(planet, point=(lon, lat), data_type="DEM")
+                found = catalogues.search(planet, point=(lon, lat), data_type="DEM")
                 provider.update(status="OK", collections=found["collections"], matched=len(found["products"]))
                 for rec in found["products"]:
                     if rec["product_id"] in registered_products:
@@ -71,7 +71,7 @@ def at_point(lon: float, lat: float, query_crs, lat_convention: str, planet: str
                     if reg is not None and reg.status == "INVALID":
                         rec = {**rec, "status": "INVALID", "quality_status": "FAILED_VALIDATION"}
                     records.append(rec)
-            except stac_client.StacError as exc:
+            except catalogues.StacError as exc:
                 provider.update(status="ERROR", error=str(exc), code=exc.code)
     elif include_remote:
         provider["status"] = "NO_CATALOGUE_FOR_BODY"

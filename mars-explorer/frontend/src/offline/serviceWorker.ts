@@ -23,7 +23,7 @@ export function registerServiceWorker(isProd: boolean = import.meta.env.PROD, na
   if (!nav || !("serviceWorker" in nav)) return set("UNSUPPORTED");
   if (!isProd) return set("DEV_DISABLED");
   nav.serviceWorker
-    .register("/sw.js")
+    .register(`${import.meta.env.BASE_URL}sw.js`)
     .then(() => set("ACTIVE"))
     .catch(() => set("FAILED"));
 }

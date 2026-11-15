@@ -1,0 +1,499 @@
+
+/* =================================
+   MARS EXPLORER — LANDING PAGE
+================================= */
+
+.mars-landing {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 650px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #160805;
+  color: #fff;
+  font-family: Inter, Arial, sans-serif;
+}
+
+/* STATIC BACKGROUND */
+
+.mars-background {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+
+  background-image: url("/images1/mars-landing.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* DARK OVERLAY */
+
+.mars-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(12, 5, 4, .85) 0%,
+      rgba(20, 7, 4, .65) 45%,
+      rgba(20, 7, 4, .12) 100%
+    ),
+    linear-gradient(
+      0deg,
+      rgba(10, 4, 3, .75),
+      transparent 45%
+    );
+}
+
+/* NAVIGATION */
+
+.landing-nav {
+  position: relative;
+  z-index: 5;
+
+  max-width: 1450px;
+  margin: auto;
+  padding: 30px 55px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border-bottom: 1px solid rgba(255,255,255,.12);
+
+  animation: navAppear 1s ease both;
+}
+
+.landing-logo {
+  color: white;
+  text-decoration: none;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.landing-logo span {
+  color: #ff6835;
+}
+
+.landing-nav-links {
+  display: flex;
+  gap: 38px;
+}
+
+.landing-nav-links a {
+  color: #e4d2c8;
+  text-decoration: none;
+  font-size: 11px;
+  letter-spacing: 2px;
+  transition: color .3s;
+}
+
+.landing-nav-links a:hover {
+  color: #ff8b55;
+}
+
+.mission-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #f0c9b5;
+}
+
+.status-light {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff793d;
+  box-shadow: 0 0 12px #ff793d;
+  animation: statusPulse 2s infinite;
+}
+
+/* HERO */
+
+.landing-hero {
+  position: relative;
+  z-index: 2;
+
+  max-width: 1450px;
+  height: calc(100% - 145px);
+  margin: auto;
+  padding: 60px 55px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+}
+
+.hero-text {
+  max-width: 680px;
+  animation: heroAppear 1.2s .2s ease both;
+}
+
+.hero-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 10px 16px;
+  border: 1px solid rgba(255,130,75,.4);
+  border-radius: 30px;
+
+  background: rgba(60,20,10,.35);
+  backdrop-filter: blur(12px);
+
+  color: #ffd0b5;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+.hero-label span {
+  color: #ff7842;
+}
+
+.hero-overline {
+  margin-top: 40px;
+  color: #ff9a69;
+  font-size: 12px;
+  letter-spacing: 6px;
+}
+
+.hero-text h1 {
+  margin: 20px 0;
+  font-size: clamp(65px, 9vw, 125px);
+  line-height: .9;
+  letter-spacing: -7px;
+  font-weight: 900;
+}
+
+.hero-text h1 span {
+  color: transparent;
+  background: linear-gradient(
+    100deg,
+    #fff0e4,
+    #ff9861,
+    #ff4929
+  );
+
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.hero-description {
+  max-width: 480px;
+  color: #e3c8ba;
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+/* BUTTONS */
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  margin-top: 35px;
+}
+
+.enter-button {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+
+  padding: 17px 25px;
+  border: 1px solid #ff8b55;
+  border-radius: 5px;
+
+  color: white;
+  background: linear-gradient(110deg, #b83d20, #e66b32);
+
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+
+  cursor: pointer;
+  transition: .3s;
+  box-shadow: 0 8px 35px rgba(220,75,35,.25);
+}
+
+.enter-button span {
+  font-size: 18px;
+}
+
+.enter-button:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(255,95,45,.45);
+  background: linear-gradient(110deg, #d54a27, #ff8242);
+}
+
+.learn-button {
+  color: #f0d4c4;
+  text-decoration: none;
+  font-size: 10px;
+  letter-spacing: 2px;
+  transition: .3s;
+}
+
+.learn-button:hover {
+  color: #ff9861;
+}
+
+/* STATISTICS */
+
+.hero-stats {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  margin-top: 65px;
+}
+
+.hero-stats div:not(.stats-divider) {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.hero-stats strong {
+  font-size: 22px;
+  color: #fff0e6;
+}
+
+.hero-stats span {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: #d1a998;
+}
+
+.stats-divider {
+  width: 1px;
+  height: 38px;
+  background: rgba(255,255,255,.25);
+}
+
+/* MISSION GLASS CARD */
+
+.mission-card {
+  width: 290px;
+  padding: 25px;
+
+  border: 1px solid rgba(255,180,140,.35);
+  border-radius: 12px;
+
+  background: rgba(32,12,8,.48);
+  backdrop-filter: blur(18px);
+
+  box-shadow: 0 20px 70px rgba(0,0,0,.35);
+
+  animation: cardAppear 1.3s .6s ease both;
+  transition: transform .4s, border-color .4s;
+}
+
+.mission-card:hover {
+  transform: translateY(-7px);
+  border-color: rgba(255,150,100,.7);
+}
+
+.mission-card-top,
+.card-bottom {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+}
+
+.mission-card-top {
+  color: #e9c7b5;
+}
+
+.mission-dot {
+  color: #ff8a50;
+}
+
+.mission-card-line {
+  height: 1px;
+  margin: 22px 0;
+  background: rgba(255,255,255,.17);
+}
+
+.card-small {
+  color: #c99a83;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+.mission-card h2 {
+  margin: 8px 0;
+  font-size: 48px;
+  letter-spacing: 5px;
+  color: #ff8852;
+}
+
+.card-description {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: #d8b4a1;
+}
+
+.card-bottom {
+  color: #c99a83;
+}
+
+/* FOOTER */
+
+.landing-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+
+  display: flex;
+  justify-content: space-between;
+
+  padding: 20px 55px;
+  border-top: 1px solid rgba(255,255,255,.12);
+
+  color: #c7a292;
+  font-size: 9px;
+  letter-spacing: 2px;
+}
+
+/* ANIMATIONS — UI ONLY */
+
+/* Background image is NOT animated */
+
+@keyframes navAppear {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes heroAppear {
+  from {
+    opacity: 0;
+    transform: translateY(35px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cardAppear {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes statusPulse {
+  50% {
+    opacity: .4;
+    box-shadow: 0 0 3px #ff793d;
+  }
+}
+
+/* MOBILE */
+
+@media (max-width: 900px) {
+  .landing-hero {
+    justify-content: center;
+    padding: 45px 30px;
+  }
+
+  .mission-card {
+    display: none;
+  }
+
+  .mars-overlay {
+    background: rgba(15,5,3,.65);
+  }
+}
+
+@media (max-width: 600px) {
+  .mars-landing {
+    min-height: 750px;
+    height: 100svh;
+    overflow-y: auto;
+  }
+
+  .landing-nav {
+    padding: 22px;
+  }
+
+  .landing-nav-links {
+    display: none;
+  }
+
+  .landing-hero {
+    height: auto;
+    min-height: calc(100% - 130px);
+    padding: 65px 24px;
+  }
+
+  .hero-text h1 {
+    font-size: 68px;
+    letter-spacing: -4px;
+  }
+
+  .hero-overline {
+    font-size: 10px;
+    letter-spacing: 3px;
+  }
+
+  .hero-description {
+    font-size: 13px;
+  }
+
+  .hero-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .hero-stats {
+    gap: 12px;
+    margin-top: 45px;
+  }
+
+  .hero-stats strong {
+    font-size: 16px;
+  }
+
+  .hero-stats span {
+    font-size: 7px;
+    letter-spacing: .5px;
+  }
+
+  .landing-footer {
+    position: relative;
+    padding: 18px 22px;
+    font-size: 7px;
+    gap: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mars-landing *,
+  .mars-landing *::before,
+  .mars-landing *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

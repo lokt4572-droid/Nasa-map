@@ -1,4 +1,4 @@
-"""Public smoke test for a MARS EXPLORER deployment (standard library only).
+"""Public smoke test for a Nova deployment (standard library only).
 
     python scripts/smoke_test.py --frontend https://your-frontend.example.org --api https://your-backend.example.org/api/v1
 
@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urljoin, urlparse
 
-UA = "MARS-EXPLORER-smoke-test/0.4"
+UA = "Nova-smoke-test/0.5"
 
 
 def fetch(url: str, *, method: str = "GET", headers: dict | None = None, body: bytes | None = None, timeout: float = 90.0):
@@ -112,7 +112,29 @@ def run(frontend: str, api: str) -> int:
         code = None
     rep.check("missing DEM returns NO DATA (not a crash)", st == 404 and code == "DEM_NOT_AVAILABLE", f"HTTP {st} {code}")
 
-    # 10 public demo protection (informational: depends on PUBLIC_READ_ONLY)
+    # 10 route planner on the bundled MOLA DEM (regional), validated on the source DEM
+    crs = "urn:ogc:def:crs:EPSG::104905"
+    pt = lambda lon, lat: {"lon_east_deg": lon, "lat_deg": lat, "crs": crs, "latitude_convention": "AS_DECLARED_BY_SOURCE", "planet": "MARS"}  # noqa: E731
+    st, _, b, dt = fetch(f"{api}/routes/plan/", method="POST", headers={"Content-Type": "application/json"},
+                         body=json.dumps({"start": pt(-10.0, 20.0), "end": pt(-6.0, 22.0), "profile": "CONSERVATIVE",
+                                          "include_return": False, "include_alternative": False}).encode(), timeout=180)
+    try:
+        r = json.loads(b)
+    except json.JSONDecodeError:
+        r = {}
+    rep.check("route planner returns a validated route (MOLA, regional)",
+              st in (200, 201) and r.get("calculation_status") == "CALCULATED" and r.get("validation_status") == "VALIDATED",
+              f"HTTP {st} in {dt:.1f} s, {r.get('calculation_status')} / {r.get('validation_status')}, label {r.get('route_label')}")
+
+    # 11 Earth weather (Open-Meteo through the backend)
+    st, _, b, dt = fetch(f"{api}/weather/current/?lat=48.85&lon=2.35")
+    try:
+        w = json.loads(b)
+    except json.JSONDecodeError:
+        w = {}
+    rep.check("Earth weather responds", st == 200 and not w.get("error"), f"HTTP {st} in {dt:.1f} s")
+
+    # 12 public demo protection (informational: depends on PUBLIC_READ_ONLY)
     st, _, b, _ = fetch(f"{api}/missions/", method="POST", headers={"Content-Type": "application/json"},
                         body=json.dumps({"name": "smoke-test", "description": "", "status": "PLANNED"}).encode())
     if st == 403:

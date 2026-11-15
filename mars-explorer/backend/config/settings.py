@@ -201,6 +201,8 @@ HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "MARS-EXPLORER/0.4 (planetar
 # Remote elevation data (v0.4): DTMs found in the USGS STAC catalogue are read window by window
 # with HTTP range requests. Set REMOTE_DEM_ENABLED=0 to keep the backend fully local.
 REMOTE_DEM_ENABLED = os.environ.get("REMOTE_DEM_ENABLED", "1") not in ("0", "false", "False", "")
+# Decoded remote windows kept in memory per process (repeat views, profiles, routes).
+REMOTE_WINDOW_CACHE_MB = int(os.environ.get("REMOTE_WINDOW_CACHE_MB", "256"))
 REMOTE_RASTER_HOSTS = tuple(
     h.strip() for h in os.environ.get("REMOTE_RASTER_HOSTS", "astrogeo-ard.s3-us-west-2.amazonaws.com,copernicus-dem-30m.s3.amazonaws.com").split(",") if h.strip()
 )

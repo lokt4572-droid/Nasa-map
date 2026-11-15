@@ -20,7 +20,7 @@ import zlib
 
 import numpy as np
 
-from services import remote_raster, dem_reader
+from services import dem_reader, remote_raster, window_cache
 from services.mars_coordinates import planetocentric_to_planetographic, planetographic_to_planetocentric
 
 PRODUCTS = ("elevation", "hillshade", "slope", "aspect", "roughness")
@@ -131,7 +131,7 @@ def sample_lonlat(ds, lon_arr, lat_arr, query_crs, lat_convention: str, max_read
             fy = max(1, math.ceil(wh / max_read[0]))
             fx = max(1, math.ceil(ww / max_read[1]))
             shape = (max(1, wh // fy), max(1, ww // fx))
-            data = src.read(1, window=Window(c0, r0, ww, wh), out_shape=shape, masked=True)
+            data = window_cache.read(src, ds.file_path, Window(c0, r0, ww, wh), shape)
             arr = np.ma.filled(data.astype("float64"), np.nan) * scale + offset
             rr = np.clip(((rows - r0) * shape[0]) // wh, 0, shape[0] - 1)
             cc = np.clip(((cols - c0) * shape[1]) // ww, 0, shape[1] - 1)

@@ -3,6 +3,7 @@ import { textureFor } from "../config/planetTextures";
 
 import { ALL_LAYERS, layersForPlanet } from "../config/mapLayers";
 import type { DemProduct } from "../services/datasetDiscoveryService";
+import type { EarthTerrainImage } from "../services/earthTerrainService";
 import type { GibsDiscovery } from "../services/earthService";
 import { DEFAULT_PLANET, type PlanetId } from "../config/planetRegistry";
 import type { TileGridInfo, TileStats } from "../services/marsMapService";
@@ -50,6 +51,17 @@ export interface EarthState {
   measure: { active: boolean; points: [number, number][] };
   view: "2D" | "3D";
   flyTo: { lon: number; lat: number; zoom?: number; bbox?: [number, number, number, number]; seq: number } | null;
+  /** Terrain colours rendered from a real DEM (v0.4: Copernicus GLO-30 tiles). */
+  terrain: EarthTerrainState;
+}
+
+export interface EarthTerrainState {
+  product: "elevation" | "hillshade" | "slope";
+  opacity: number;
+  status: "idle" | "loading" | "ready" | "no-data" | "error";
+  message: string | null;
+  images: EarthTerrainImage[];
+  missingTiles: number;
 }
 
 export type TerrainProduct = "elevation" | "hillshade" | "slope" | "aspect" | "roughness";
@@ -231,6 +243,7 @@ export const useAppStore = create<AppState>((set) => ({
     measure: { active: false, points: [] },
     view: "2D",
     flyTo: null,
+    terrain: { product: "hillshade", opacity: 0.75, status: "idle", message: null, images: [], missingTiles: 0 },
   },
 
   bodyView: "MAP",

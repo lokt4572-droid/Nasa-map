@@ -16,8 +16,10 @@ import { LineString, Point } from "ol/geom";
 import { circular } from "ol/geom/Polygon";
 import TileLayer from "ol/layer/Tile";
 import VectorLayer from "ol/layer/Vector";
-import { fromLonLat, toLonLat } from "ol/proj";
+import ImageLayer from "ol/layer/Image";
+import { fromLonLat, toLonLat, transformExtent } from "ol/proj";
 import { getLength } from "ol/sphere";
+import ImageStatic from "ol/source/ImageStatic";
 import OSM from "ol/source/OSM";
 import VectorSource from "ol/source/Vector";
 import XYZ from "ol/source/XYZ";
@@ -92,7 +94,8 @@ export default function EarthMap() {
       // Web Mercator m/px at the equator expressed as degrees/px; the shared scale bar then
       // applies N(φ)·cos(φ) on the WGS84 ellipsoid (cos φ is applied there, not here).
       const res = (v.getResolution() ?? 0) / 111_319.49;
-      setView({ resolution: res, centerLat: c[1] ?? 0, zoom: v.getZoom() ?? 0 });
+      const ext = transformExtent(v.calculateExtent(map.getSize()), "EPSG:3857", "EPSG:4326");
+      setView({ resolution: res, centerLat: c[1] ?? 0, centerLon: c[0] ?? 0, zoom: v.getZoom() ?? 0, extent: ext });
     });
     map.on("singleclick", (e) => {
       const [lonRaw, lat] = toLonLat(e.coordinate);
@@ -191,6 +194,29 @@ export default function EarthMap() {
     f.setStyle(measureStyle(pts.length > 1 ? formatDistance(len) : ""));
     src.addFeature(f);
   }, [earth.measure.points]);
+
+  // Terrain colours from a real DEM: one lon/lat image per DEM tile, reprojected by OpenLayers.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const layers = earth.terrain.images.map(
+      (img) =>
+        new ImageLayer<ImageStatic>({
+          zIndex: 50,
+          opacity: earth.terrain.opacity,
+          source: new ImageStatic({
+            url: img.url,
+            imageExtent: img.bbox,
+            projection: "EPSG:4326",
+            interpolate: false,
+            attributions: "Elevation: Copernicus DEM GLO-30 (DSM) © DLR e.V. / Airbus, provided under COPERNICUS by the EU and ESA",
+          }),
+          properties: { role: "earth-terrain" },
+        }),
+    );
+    layers.forEach((l) => map.addLayer(l));
+    return () => layers.forEach((l) => map.removeLayer(l));
+  }, [earth.terrain.images, earth.terrain.opacity, ready]);
 
   // Fly-to commands (search results, my location).
   useEffect(() => {

@@ -159,7 +159,7 @@ HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "MARS-EXPLORER/0.4 (planetar
 # with HTTP range requests. Set REMOTE_DEM_ENABLED=0 to keep the backend fully local.
 REMOTE_DEM_ENABLED = os.environ.get("REMOTE_DEM_ENABLED", "1") not in ("0", "false", "False", "")
 REMOTE_RASTER_HOSTS = tuple(
-    h.strip() for h in os.environ.get("REMOTE_RASTER_HOSTS", "astrogeo-ard.s3-us-west-2.amazonaws.com").split(",") if h.strip()
+    h.strip() for h in os.environ.get("REMOTE_RASTER_HOSTS", "astrogeo-ard.s3-us-west-2.amazonaws.com,copernicus-dem-30m.s3.amazonaws.com").split(",") if h.strip()
 )
 NOMINATIM_URL = os.environ.get("NOMINATIM_URL", "https://nominatim.openstreetmap.org/search")
 OPEN_METEO_URL = os.environ.get("OPEN_METEO_URL", "https://api.open-meteo.com/v1/forecast")

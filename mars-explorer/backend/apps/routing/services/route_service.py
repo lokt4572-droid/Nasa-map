@@ -151,15 +151,15 @@ def _candidate_dems(points, query_crs, lat_conv, planet, only_id=None, terrain_s
         per_point.append({d.id: d for d in dataset_manager.datasets_covering(p["lon_east_deg"], p["lat_deg"], query_crs, lat_convention=lat_conv, planet=planet)})
     notes: list[str] = []
     if terrain_source == "auto" and not only_id:
-        from apps.datasets.services import dataset_discovery, stac_client
+        from apps.datasets.services import catalogues, dataset_discovery
 
         try:
-            first = stac_client.search(planet, point=(points[0]["lon_east_deg"], points[0]["lat_deg"]), data_type="DEM")["products"]
+            first = catalogues.search(planet, point=(points[0]["lon_east_deg"], points[0]["lat_deg"]), data_type="DEM")["products"]
             best_local = min((d.resolution_meters or float("inf") for d in per_point[0].values() if all(d.id in s for s in per_point)), default=float("inf"))
             for rec in first:
                 if (rec["resolution_m"] or float("inf")) >= best_local:
                     break
-                if not all(stac_client.point_in_footprint(rec["footprint"], p["lon_east_deg"], p["lat_deg"]) for p in points):
+                if not all(catalogues.point_in_footprint(rec["footprint"], p["lon_east_deg"], p["lat_deg"]) for p in points):
                     continue
                 try:
                     ds = dataset_discovery.register_remote_dem(rec)
@@ -170,7 +170,7 @@ def _candidate_dems(points, query_crs, lat_conv, planet, only_id=None, terrain_s
                     s[ds.id] = ds
                 notes.append(f"Using catalogue DTM {rec['product_id']} ({rec['instrument']}) read remotely")
                 break
-        except stac_client.StacError as exc:
+        except catalogues.StacError as exc:
             notes.append(f"Provider catalogue not available ({exc}); registered DEMs only")
     common = [d for d_id, d in per_point[0].items() if all(d_id in s for s in per_point[1:])]
     if only_id:

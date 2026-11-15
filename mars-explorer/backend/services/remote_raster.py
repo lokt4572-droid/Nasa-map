@@ -13,8 +13,9 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 
-# USGS Astrogeology Analysis Ready Data bucket (STAC assets, CC0-1.0).
-DEFAULT_HOSTS = ("astrogeo-ard.s3-us-west-2.amazonaws.com",)
+# USGS Astrogeology Analysis Ready Data bucket (STAC assets, CC0-1.0) and the Copernicus DEM
+# GLO-30 Public bucket (AWS Open Data, Copernicus DEM licence).
+DEFAULT_HOSTS = ("astrogeo-ard.s3-us-west-2.amazonaws.com", "copernicus-dem-30m.s3.amazonaws.com")
 
 GDAL_REMOTE_ENV = {
     "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",  # no directory listing requests

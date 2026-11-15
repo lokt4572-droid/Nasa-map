@@ -375,6 +375,15 @@ def render(request):
     if not (-540 <= west < east <= 540 and -90 <= south < north <= 90):
         raise ApiError("bbox out of range or empty", code="VALIDATION_ERROR", status_code=400)
     lat_conv = qp.get("lat_convention") or "AS_DECLARED_BY_SOURCE"
+    value_range = None
+    if qp.get("range"):
+        try:
+            r_lo, r_hi = (float(v) for v in qp["range"].split(","))
+        except ValueError as exc:
+            raise ApiError("range must be min,max", code="VALIDATION_ERROR", status_code=400) from exc
+        if not (r_lo < r_hi) or abs(r_lo) > 1e6 or abs(r_hi) > 1e6:
+            raise ApiError("range must be min,max with min < max", code="VALIDATION_ERROR", status_code=400)
+        value_range = (r_lo, r_hi)
     try:
         ds = Dataset.objects.get(pk=ds_id, status=Dataset.Status.VALID)
     except Dataset.DoesNotExist as exc:
@@ -388,7 +397,7 @@ def render(request):
     if not dataset_manager.refresh_file_status(ds):
         raise ApiError("Dataset file is missing", code="DEM_NOT_AVAILABLE", status_code=404)
     try:
-        png, meta = raster_render.render(ds, qp.get("product", "elevation"), (west, south, east, north), width, height, crs, lat_conv)
+        png, meta = raster_render.render(ds, qp.get("product", "elevation"), (west, south, east, north), width, height, crs, lat_conv, value_range)
     except raster_render.RenderError as exc:
         raise ApiError(str(exc), code="VALIDATION_ERROR", status_code=400) from exc
     resp = HttpResponse(png, content_type="image/png")
@@ -437,7 +446,7 @@ def patch(request):
 
     404 DEM_NOT_AVAILABLE when no validated DEM covers the point; 422 when the DEM is too coarse
     for the requested radius (the response says the minimum radius)."""
-    from apps.datasets.services import coverage_service, dataset_discovery, stac_client
+    from apps.datasets.services import catalogues, coverage_service, dataset_discovery
     from services import terrain_patch
 
     qp = request.query_params.copy()
@@ -465,8 +474,8 @@ def patch(request):
     if qp.get("product"):
         coll, _, pid = qp["product"].partition("/")
         try:
-            forced = _register(stac_client.get_product(coll, pid))
-        except stac_client.StacError as exc:
+            forced = _register(catalogues.get_product(coll, pid))
+        except catalogues.StacError as exc:
             raise ApiError(str(exc), code=exc.code, status_code=404 if exc.code == "NOT_FOUND" else 502) from exc
         selection = {"mode": "product", "reason": "catalogue product chosen by the user"}
     elif source == "auto" and not qp.get("dataset"):

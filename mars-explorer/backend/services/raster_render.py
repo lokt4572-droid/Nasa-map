@@ -164,7 +164,10 @@ def _gradients(z: np.ndarray, bbox, radius_m: float) -> tuple[np.ndarray, np.nda
     return dzdx / np.maximum(dx, 1e-9), -dzdy_rows / dy  # +x east, +y north
 
 
-def render(ds, product: str, bbox, width: int, height: int, query_crs, lat_convention: str) -> tuple[bytes, dict]:
+def render(ds, product: str, bbox, width: int, height: int, query_crs, lat_convention: str,
+           value_range: tuple[float, float] | None = None) -> tuple[bytes, dict]:
+    """``value_range`` fixes the elevation colour stretch (e.g. one range shared by adjacent tiles so
+    that a colour means the same height everywhere). Values outside it are drawn at the end colours."""
     if product not in PRODUCTS:
         raise RenderError(f"product must be one of {', '.join(PRODUCTS)}")
     if not (1 <= width <= MAX_SIDE and 1 <= height <= MAX_SIDE):
@@ -181,8 +184,9 @@ def render(ds, product: str, bbox, width: int, height: int, query_crs, lat_conve
         meta.update(value_min=None, value_max=None, units=None)
     elif product == "elevation":
         lo, hi = float(np.nanmin(z)), float(np.nanmax(z))
-        rgb = _ramp(np.nan_to_num((z - lo) / max(hi - lo, 1e-9)), ELEVATION_STOPS)
-        meta.update(value_min=lo, value_max=hi, units="m")
+        s_lo, s_hi = value_range if value_range else (lo, hi)
+        rgb = _ramp(np.clip(np.nan_to_num((z - s_lo) / max(s_hi - s_lo, 1e-9)), 0.0, 1.0), ELEVATION_STOPS)
+        meta.update(value_min=lo, value_max=hi, units="m", stretch_min=s_lo, stretch_max=s_hi)
     else:
         gx, gy = _gradients(z, bbox, radius)
         slope = np.degrees(np.arctan(np.hypot(gx, gy)))

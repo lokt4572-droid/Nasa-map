@@ -59,6 +59,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static files (admin) in production when whitenoise is installed.
+    *(["whitenoise.middleware.WhiteNoiseMiddleware"] if __import__("importlib").util.find_spec("whitenoise") else []),
+    "apps.core.middleware.PublicReadOnlyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -87,8 +90,29 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
+def database_from_url(url: str) -> dict:
+    """postgres://user:pass@host:port/name?sslmode=require -> Django settings (no extra dependency)."""
+    from urllib.parse import parse_qs, unquote, urlparse
+
+    u = urlparse(url)
+    if u.scheme not in ("postgres", "postgresql", "postgis"):
+        raise ValueError(f"Unsupported DATABASE_URL scheme {u.scheme!r} (use postgres://)")
+    opts = {k: v[-1] for k, v in parse_qs(u.query).items()}
+    return {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": unquote(u.path.lstrip("/")),
+        "USER": unquote(u.username or ""),
+        "PASSWORD": unquote(u.password or ""),
+        "HOST": u.hostname or "",
+        "PORT": str(u.port or ""),
+        "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+        "OPTIONS": opts,
+    }
+
+
+# PostgreSQL when DATABASE_URL is set (production); SQLite file for local development.
 DATABASES = {
-    "default": {
+    "default": database_from_url(os.environ["DATABASE_URL"]) if os.environ.get("DATABASE_URL") else {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
@@ -107,6 +131,25 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # collectstatic target (production)
+
+# --- Production security (all from the environment; defaults are safe for local development)
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", "")
+if not DEBUG:
+    # Behind a TLS-terminating proxy (Render, Railway, ...): trust its X-Forwarded-Proto header.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", False)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# --- Public demo protection. When PUBLIC_READ_ONLY is on, the API refuses changes to shared records
+# (missions, hazards, dataset files) from anonymous visitors; computations (route planning, terrain
+# patches, catalogue registration, AI interpretation) stay available. An operator can still write
+# with the header "X-Api-Token: <WRITE_API_TOKEN>" (backend secret; never in the frontend).
+PUBLIC_READ_ONLY = env_bool("PUBLIC_READ_ONLY", False)
+WRITE_API_TOKEN = os.environ.get("WRITE_API_TOKEN", "")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- CORS: only the configured frontend origin may call the API from a browser.
@@ -119,8 +162,8 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
-    # First technical version: no authentication yet (local single-user tool).
-    # Replace before exposing the API on any shared network.
+    # No user accounts: a local single-user tool, and a public demo protected by PUBLIC_READ_ONLY
+    # (see above). Add authentication before letting several users edit shared mission data.
     "DEFAULT_AUTHENTICATION_CLASSES": [],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
     "UNAUTHENTICATED_USER": None,

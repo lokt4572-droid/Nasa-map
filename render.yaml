@@ -1,0 +1,62 @@
+# Example Render blueprint (one option among several: see mars-explorer/docs/DEPLOYMENT.md).
+# Secrets are NOT stored here: values marked sync:false are entered in the Render dashboard.
+# Check plan limits before using it (2026-11-15): free web services sleep after 15 min idle
+# (~1 min cold start) and have no persistent disk; free Postgres expires after 30 days.
+services:
+  - type: web
+    name: mars-explorer-api
+    runtime: python
+    rootDir: mars-explorer/backend
+    plan: starter            # a paid plan is required for the persistent disk below
+    buildCommand: pip install -r requirements-prod.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate --noinput && python manage.py bootstrap_demo_data && gunicorn config.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 180
+    healthCheckPath: /api/v1/health/
+    disk:
+      name: mars-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: WRITE_API_TOKEN
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: PUBLIC_READ_ONLY
+        value: "True"
+      - key: MARS_DATA_DIR
+        value: /var/data/mars
+      - key: SECURE_SSL_REDIRECT
+        value: "True"
+      - key: AI_PROVIDER
+        value: rules
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mars-explorer-db
+          property: connectionString
+  - type: web
+    name: mars-explorer-web
+    runtime: static
+    rootDir: mars-explorer/frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_CESIUM_ION_TOKEN
+        sync: false
+databases:
+  - name: mars-explorer-db
+    plan: basic-256mb

@@ -1,0 +1,3 @@
+# SPA fallback for Netlify and compatible static hosts: every page path (/, /rover/, /map/)
+# is served by index.html. Existing files (assets, images, sw.js) are served first.
+/*    /index.html    200

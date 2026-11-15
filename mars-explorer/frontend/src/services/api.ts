@@ -3,8 +3,18 @@
  */
 import type { ApiErrorBody } from "../types/api";
 
-export const API_BASE_URL: string =
-  (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "") || "http://127.0.0.1:8000/api/v1";
+/**
+ * Backend base URL. VITE_API_BASE_URL wins (e.g. https://api.example.org/api/v1). Without it a
+ * production build calls its own origin ("/api/v1", for a host that proxies /api to the backend)
+ * and development calls the local Django server.
+ */
+export function resolveApiBase(configured: string | undefined, isProd: boolean): string {
+  const v = (configured ?? "").trim().replace(/\/+$/, "");
+  if (v) return v;
+  return isProd ? "/api/v1" : "http://127.0.0.1:8000/api/v1";
+}
+
+export const API_BASE_URL: string = resolveApiBase(import.meta.env.VITE_API_BASE_URL, import.meta.env.PROD);
 
 export class ApiError extends Error {
   constructor(
@@ -44,7 +54,7 @@ export interface RequestOptions {
 }
 
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}, fetchImpl: typeof fetch = fetch): Promise<T> {
-  const url = new URL(API_BASE_URL + path);
+  const url = new URL(API_BASE_URL + path, typeof window !== "undefined" ? window.location.origin : "http://localhost");
   for (const [k, v] of Object.entries(opts.query ?? {})) {
     if (v !== undefined) url.searchParams.set(k, String(v));
   }

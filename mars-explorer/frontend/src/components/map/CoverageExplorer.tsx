@@ -146,7 +146,9 @@ function DemFootprintSearch() {
                 <dd>{(p.time_range.start ?? p.time_range.datetime ?? "not stated").slice(0, 10)}</dd>
                 <dt>Data</dt>
                 <dd>
-                  DEM: yes · orthoimage: {p.imagery_available ? "yes" : "no"} · {p.format}
+                  DEM: {p.product_kind ?? "yes"} · orthoimage: {p.imagery_available ? "yes" : "no"} · {p.format}
+                  {p.source_imagery && <><br />Derived from: {p.source_imagery}</>}
+                  {p.coverage && <><br />Coverage: {p.coverage}</>}
                 </dd>
                 <dt>Datum</dt>
                 <dd>{p.vertical_datum}</dd>

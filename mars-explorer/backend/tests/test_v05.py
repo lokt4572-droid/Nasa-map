@@ -107,3 +107,17 @@ class SourceValidationTests(TempDirMixin, TestCase):
             self.assertGreater(len(b["route"]["unverified_geometry"]["coordinates"]), 0)
             self.assertEqual(b["route_label"], "PARTIALLY UNVERIFIED ROUTE")
         self.assertIn("EXPLORATORY", PROFILES["STANDARD"].description)
+
+
+class ProductMetadataTests(TestCase):
+    def test_product_kind_metadata(self):
+        from apps.datasets.services import copernicus_client, stac_client
+        c = stac_client.COLLECTIONS
+        assert "CTX stereo images" in c["mro_ctx_controlled_usgs_dtms"].source_imagery
+        assert "not the DTM" in c["mro_hirise_socet_dtms"].source_imagery
+        assert "70S-70N" in c["kaguya_terrain_camera_usgs_dtms_v2"].coverage
+        assert "polar" in c["kaguya_terrain_camera_usgs_dtms_v2_southpolar"].coverage
+        assert copernicus_client.COLLECTION.product_kind.startswith("DSM")
+        from apps.datasets.catalog import CATALOG
+        mola = next(e for e in CATALOG if e["key"] == "mars-mola-megdr")
+        assert "OVERVIEW ONLY" in mola["purpose"]

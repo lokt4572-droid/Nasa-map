@@ -30,6 +30,9 @@ export interface DemProduct {
   quality: { valid_percent?: number | null; qa_metrics_url?: string | null; note?: string };
   dem_available: boolean;
   imagery_available: boolean;
+  product_kind?: string;
+  source_imagery?: string;
+  coverage?: string;
   source_url: string | null;
   docs_url?: string;
   registered_dataset_id?: number | null;

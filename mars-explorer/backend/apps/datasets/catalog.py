@@ -33,7 +33,7 @@ CATALOG: list[E] = [
     {"key": "mars-mola-megdr", "planet": "MARS", "dataset": "MGS MOLA MEGDR topography (PDS4)", "source": "NASA PDS Geosciences Node", "instrument": "MGS MOLA",
      "product_id": "megt* (meg004 … meg128)", "data_type": "DEM", "resolution": "4–128 px/deg (≈14.8 km – 463 m)", "spatial_coverage": "global (polar products separate)", "temporal_coverage": "1997–2001 altimetry",
      "crs": "Equirectangular on 3 396 000 m sphere (from label)", "units": "m", "vertical_datum": "MOLA areoid (GMM3, mgm1025)", "license": "NASA PDS public data", "access": "DOWNLOAD",
-     "url": "https://pds-geosciences.wustl.edu/mgs/urn-nasa-pds-mgs_mola_topography_derived/", "purpose": "Elevation, slope, A* routing", "facts": "verified 2026-11-14 (label read, MD5 checked)",
+     "url": "https://pds-geosciences.wustl.edu/mgs/urn-nasa-pds-mgs_mola_topography_derived/", "purpose": "GLOBAL/REGIONAL OVERVIEW ONLY: elevation, slope, regional A* routing (not local obstacle avoidance)", "facts": "verified 2026-11-14 (label read, MD5 checked)", "product_kind": "DTM (gridded laser altimetry; ~14.8 km at 4 px/deg)",
      "match": {"planet": "MARS", "instrument": "MGS MOLA"}},
     {"key": "mars-hirise-dtm", "planet": "MARS", "dataset": "HiRISE DTMs", "source": "University of Arizona / HiRISE", "instrument": "MRO HiRISE",
      "product_id": "DTEE*/DTEC* per site", "data_type": "DEM", "resolution": "≈1–2 m post spacing (typical)", "spatial_coverage": "regional, only where stereo DTMs exist", "temporal_coverage": "per product",

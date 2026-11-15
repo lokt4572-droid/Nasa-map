@@ -45,6 +45,9 @@ COLLECTION = StacCollection(
     docs_url=f"{BUCKET}/readme.html",
     notes=("Digital SURFACE model (buildings and vegetation included, not bare earth). 1x1 degree tiles at 1 arc-second. "
            "No tiles over oceans: reported as no data, never as zero. Some countries are not in the public 30 m release."),
+    product_kind="DSM (surface model: buildings and vegetation included, not bare earth)",
+    source_imagery="TanDEM-X radar interferometry (not optical images)",
+    coverage="global land in 1x1 degree tiles; oceans and some countries absent",
 )
 
 
@@ -102,7 +105,7 @@ def record(tid: str) -> dict:
     return {
         "planet_id": "EARTH", "dataset_id": COLLECTION.id, "product_id": tid, "provider": PROVIDER,
         "source": "Copernicus Programme (ESA / EU), distributed via AWS Open Data", "instrument": COLLECTION.instrument,
-        "data_type": "DEM", "level": "REGIONAL", "format": "Cloud-Optimized GeoTIFF",
+        "data_type": "DEM", "product_kind": COLLECTION.product_kind, "source_imagery": COLLECTION.source_imagery, "coverage": COLLECTION.coverage, "level": "REGIONAL", "format": "Cloud-Optimized GeoTIFF",
         "resolution_m": round(math.radians(1 / 3600) * 6_371_008.8, 2),  # 1 arc-second N-S, nominal
         "effective_accuracy": "NOT_DOCUMENTED",
         "footprint": {"type": "Polygon", "coordinates": [ring]}, "bbox": [w, s, e, n],

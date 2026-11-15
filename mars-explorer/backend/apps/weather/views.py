@@ -1,12 +1,9 @@
 import datetime as dt
-
 from rest_framework import serializers
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-
 from apps.core.exceptions import ApiError
 from services import http_client
-
 from . import services
 
 

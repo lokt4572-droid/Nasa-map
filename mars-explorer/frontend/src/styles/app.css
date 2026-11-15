@@ -398,3 +398,20 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .header__home { color: inherit; text-decoration: none; }
 .header__home:hover .brand { color: var(--accent-2); }
 .not-found { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.lt3d__layout { margin-left: auto; display: flex; gap: 4px; }
+.lt3d__layout .btn { margin-left: 0; }
+/* Side by side: the 3D view takes the right half; the 2D map (with the patch outlined) stays visible. */
+.lt3d--split { position: fixed; z-index: 50; top: 60px; bottom: 40px; right: 16px; left: max(50%, 420px); overflow-y: auto; margin: 0; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+@media (max-width: 760px) { .lt3d--split { left: 16px; top: 50%; } }
+.loc-actions { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.registry-scroll { max-height: 360px; overflow: auto; margin-top: 6px; }
+.registry-scroll .cmp-table td { vertical-align: top; }
+.server-banner { position: fixed; top: 52px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(640px, calc(100% - 32px));
+  background: rgba(40,34,14,.96); border: 1px solid var(--warn); color: var(--text); border-radius: var(--radius); padding: 6px 12px; font-size: 12px; }
+.lt3d__warn { margin: 6px 8px 0; padding: 6px 8px; border: 1px solid var(--warn); border-radius: var(--radius); color: var(--warn); font-size: 11.5px; font-weight: 600; letter-spacing: .03em; }
+.lt3d__warn .small { color: var(--text-dim); font-weight: 400; margin-top: 2px; }
+.earth-diag { position: absolute; left: 10px; top: 60px; z-index: 12; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 0; max-width: min(420px, calc(100% - 20px));
+  background: rgba(24,27,31,.94); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 6px 8px; font-size: 10.5px; }
+.earth-diag dt { color: var(--text-faint); letter-spacing: .05em; }
+.earth-diag dd { margin: 0; }
+.lt3d__routehint { padding: 4px 8px 0; }

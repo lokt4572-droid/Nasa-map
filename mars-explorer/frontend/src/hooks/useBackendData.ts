@@ -17,11 +17,16 @@ export function useBackendHealth(intervalMs = 15_000): void {
         if (alive) setBackend({ status: "offline", health: null, error: describeError(err) });
       }
     };
-    void check();
-    const t = setInterval(check, intervalMs);
+    // Poll faster while the server is unreachable (a sleeping free host wakes in about a minute).
+    let t: ReturnType<typeof setTimeout>;
+    const loop = async () => {
+      await check();
+      if (alive) t = setTimeout(loop, useAppStore.getState().backend.status === "online" ? intervalMs : 5_000);
+    };
+    void loop();
     return () => {
       alive = false;
-      clearInterval(t);
+      clearTimeout(t);
     };
   }, [intervalMs, setBackend]);
 }

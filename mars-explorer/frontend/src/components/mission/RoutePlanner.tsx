@@ -68,13 +68,13 @@ function Comparison({ c }: { c: RouteComparison }) {
   );
 }
 
-function fmtCell(key: string, v: number | null | undefined): string {
+export function fmtCell(key: string, v: number | null | undefined): string {
   if (v === null || v === undefined) return "—";
   if (key.endsWith("_m") && key.startsWith("distance")) return formatDistance(v);
   if (key.endsWith("_deg")) return `${v.toFixed(1)}°`;
   if (key.endsWith("_pct") || key.startsWith("nodata")) return `${v.toFixed(1)}%`;
-  if (key.endsWith("_m")) return v >= 1000 ? formatDistance(v) : `${v.toFixed(0)} m`;
-  return v.toFixed(0);
+  if (key.endsWith("_m")) return v >= 1000 ? formatDistance(v) : `${v.toFixed(v < 10 ? 1 : 0)} m`;
+  return v.toFixed(Math.abs(v) < 10 ? 1 : 0);
 }
 
 /** v0.4 comparison: every value is copied from the planner's metrics; labels are neutral. */
@@ -440,7 +440,7 @@ export default function RoutePlanner() {
           Movement profile
           <select value={draft.profile} onChange={(e) => setRouteDraft({ profile: e.target.value as "CONSERVATIVE" | "STANDARD" })}>
             <option value="CONSERVATIVE">CONSERVATIVE</option>
-            <option value="STANDARD">STANDARD</option>
+            <option value="STANDARD">STANDARD — exploratory, not conservative</option>
           </select>
         </label>
         {profile && (
@@ -530,7 +530,11 @@ export default function RoutePlanner() {
               <span className="small">
                 {r.route_label}
                 {r.planning_level ? ` · planning level ${r.planning_level.level} (${r.planning_level.name})` : ""}
-                {r.route.validation ? (r.route.validation.valid ? " · re-validated on the DEM grid" : " · VALIDATION FAILED") : ""}
+                {r.route.source_validation
+                  ? r.route.source_validation.status === "VALIDATED"
+                    ? ` · VALIDATED on ${r.route.source_validation.source.dataset} every ${r.route.source_validation.source.sample_spacing_m.toFixed(1)} m`
+                    : " · VALIDATION FAILED"
+                  : ""}
               </span>
             </div>
           )}
@@ -562,6 +566,26 @@ export default function RoutePlanner() {
           {expl.data && <ExplanationView e={expl.data} />}
           {expl.error && <div className="error-text small">Explanation failed: {expl.error}</div>}
           <div className="layer-card__actions">
+            <button
+              className="btn btn--small btn--ghost"
+              title="Local 3D terrain covering the whole route (one bounded patch; Route A orange, Route B blue)"
+              onClick={() => {
+                const pts = [...r.route.geometry.coordinates, ...(r.alternative_route?.geometry.coordinates ?? [])];
+                const lons = pts.map((p) => p[0]);
+                const lats = pts.map((p) => p[1]);
+                const lon = (Math.min(...lons) + Math.max(...lons)) / 2;
+                const lat = (Math.min(...lats) + Math.max(...lats)) / 2;
+                const R = planet === "EARTH" ? 6_371_000 : planet === "MOON" ? 1_737_400 : planet === "MERCURY" ? 2_439_400 : 3_389_500;
+                const halfDeg = Math.max((Math.max(...lats) - Math.min(...lats)) / 2, ((Math.max(...lons) - Math.min(...lons)) / 2) * Math.cos((lat * Math.PI) / 180));
+                const radius = Math.min(500_000, Math.max(250, halfDeg * (Math.PI / 180) * R * 1.15));
+                const st = useAppStore.getState();
+                st.selectPoint({ lon, lat, crs: draft.start?.crs ?? "", layerId: st.activeLayerId, pickedAt: new Date().toISOString() });
+                st.setTerrainRadiusRequest({ radiusM: Math.round(radius), seq: Date.now() });
+                st.setTerrainView("split");
+              }}
+            >
+              Route in 3D
+            </button>
             <button className="btn btn--small btn--ghost" disabled={expl.busy} onClick={() => void explain(r.id)}>
               {expl.busy ? "Explaining…" : "Explain this route"}
             </button>

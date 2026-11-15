@@ -81,7 +81,7 @@ export default function Sidebar() {
         {section === "e-weather" && (
           <>
             <WeatherPanel />
-            <EarthLayersPanel groups={["PRECIPITATION", "ATMOSPHERE"]} />
+            <EarthLayersPanel groups={["PRECIPITATION", "ATMOSPHERE", "GEOSTATIONARY"]} />
           </>
         )}
         {section === "e-location" && <LocationPanel />}

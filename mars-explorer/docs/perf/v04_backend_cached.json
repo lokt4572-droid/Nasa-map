@@ -1,0 +1,100 @@
+{
+  "date_utc": "2026-11-15T11:07:17Z",
+  "api": "http://127.0.0.1:8000/api/v1",
+  "results": [
+    {
+      "case": "patch MOLA 4 px/deg (local file), 256\u00b2",
+      "status": 200,
+      "cold_ms": 458,
+      "warm_median_ms": 351,
+      "bytes": 15791,
+      "dataset": "mola-global",
+      "grid": "67x67, 14817.845349 m DEM, nodata 0.0 %"
+    },
+    {
+      "case": "patch HiRISE Jezero (remote COG), 256\u00b2",
+      "status": 200,
+      "cold_ms": 9675,
+      "warm_median_ms": 568,
+      "bytes": 205308,
+      "dataset": "stac-dteec_045994_1985_046060_1985_u01",
+      "grid": "256x256, 1.016553 m DEM, nodata 0.0 %"
+    },
+    {
+      "case": "patch CTX/HiRISE Gusev (remote, new product), 256\u00b2",
+      "status": 200,
+      "cold_ms": 13977,
+      "warm_median_ms": 545,
+      "bytes": 207943,
+      "dataset": "stac-dteec_001513_1655_001777_1650_u01",
+      "grid": "256x256, 1.014888 m DEM, nodata 0.0 %"
+    },
+    {
+      "case": "patch Kaguya TC Moon (remote), 256\u00b2",
+      "status": 200,
+      "cold_ms": 11588,
+      "warm_median_ms": 488,
+      "bytes": 256624,
+      "dataset": "stac-tc1w2b0_01_02668n009e0239__tc2w2b0_01_02668n002e0239",
+      "grid": "256x256, 33.080817 m DEM, nodata 0.0671 %"
+    },
+    {
+      "case": "patch Copernicus GLO-30 Alps (remote), 256\u00b2",
+      "status": 200,
+      "cold_ms": 8320,
+      "warm_median_ms": 89,
+      "bytes": 228048,
+      "dataset": "stac-copernicus_dsm_cog_10_n45_00_e007_00_dem",
+      "grid": "256x256, 30.872653 m DEM, nodata 21.4844 %"
+    },
+    {
+      "case": "profile HiRISE Jezero, 200 samples",
+      "status": 200,
+      "cold_ms": 9695,
+      "warm_median_ms": 502,
+      "bytes": 23619,
+      "dataset": "stac-dteec_045994_1985_046060_1985_u01"
+    },
+    {
+      "case": "catalogue search USGS STAC (point)",
+      "status": 200,
+      "cold_ms": 3998,
+      "warm_median_ms": 252,
+      "bytes": 15338
+    },
+    {
+      "case": "catalogue search Copernicus (bbox)",
+      "status": 200,
+      "cold_ms": 30,
+      "warm_median_ms": 23,
+      "bytes": 24021
+    },
+    {
+      "case": "route MOLA regional 740 km",
+      "status": 201,
+      "cold_ms": 1002,
+      "warm_median_ms": 1015,
+      "bytes": 21035,
+      "route_grid": "49x61 cells, decimation 1.0",
+      "dataset": "mola-global"
+    },
+    {
+      "case": "route MOLA across lon 0 (seam)",
+      "status": 201,
+      "cold_ms": 918,
+      "warm_median_ms": 786,
+      "bytes": 10054,
+      "route_grid": "21x36 cells, decimation 1.0",
+      "dataset": "mola-global"
+    },
+    {
+      "case": "route HiRISE Jezero 380 m (+return, alternative)",
+      "status": 201,
+      "cold_ms": 15457,
+      "warm_median_ms": 3997,
+      "bytes": 93039,
+      "route_grid": "260x300 cells, decimation 1.453",
+      "dataset": "stac-dteec_045994_1985_046060_1985_u01"
+    }
+  ]
+}

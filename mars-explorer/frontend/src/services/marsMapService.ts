@@ -358,8 +358,9 @@ export const mapController = {
   zoomToGlobal() {
     handle?.view.animate({ center: GLOBAL_VIEW.center, resolution: GLOBAL_VIEW.resolution, duration: 400 });
   },
-  zoomToBBox(b: BBox) {
-    handle?.view.fit(bboxToExtent(b), { padding: [40, 40, 40, 40], duration: 500 });
+  /** `padding` (px, top/right/bottom/left) keeps the box clear of panels drawn over the map. */
+  zoomToBBox(b: BBox, padding: [number, number, number, number] = [40, 40, 40, 40]) {
+    handle?.view.fit(bboxToExtent(b), { padding, duration: 500 });
   },
   centerOn(lon: number, lat: number, resolution?: number) {
     handle?.view.animate({ center: [lon, lat], ...(resolution ? { resolution } : {}), duration: 400 });

@@ -86,7 +86,7 @@ PROFILES: dict[str, MovementProfile] = {
     ),
     "STANDARD": MovementProfile(
         id="STANDARD",
-        description="Steeper slopes allowed; may cross short gaps in DEM coverage at a heavy penalty, reported explicitly.",
+        description="EXPLORATORY (not conservative): steeper slopes; may cross gaps in DEM coverage at a heavy penalty, drawn and reported as UNVERIFIED. Not a recommended route.",
         max_slope_deg=25.0,
         slope_weight=2.0,
         roughness_weight=1.0,

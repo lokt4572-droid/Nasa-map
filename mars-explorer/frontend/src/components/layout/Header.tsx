@@ -36,7 +36,7 @@ export default function Header() {
         }}
       >
         <img src={`${import.meta.env.BASE_URL}assets/mars-explorer.svg`} alt="" width={22} height={22} />
-        <span className="brand">MARS EXPLORER</span>
+        <span className="brand">NOVA</span>
         <span className="version">v0.4 · technical preview</span>
       </a>
       <PlanetSwitcher />

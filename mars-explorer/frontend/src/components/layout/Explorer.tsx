@@ -26,6 +26,7 @@ export default function Explorer() {
   const planet = useAppStore((s) => s.planet);
   const earthView = useAppStore((s) => s.earth.view);
   const bodyView = useAppStore((s) => s.bodyView);
+  const backend = useAppStore((s) => s.backend.status);
   // Browser geolocation is Earth-only: forget the position when leaving Earth.
   useEffect(() => {
     if (planet !== "EARTH") geolocation.reset();
@@ -33,6 +34,13 @@ export default function Explorer() {
   return (
     <div className="app">
       <Header />
+      {backend !== "online" && (
+        <div className="server-banner" role="status" data-testid="server-banner">
+          {backend === "unknown"
+            ? "Connecting to the Nova server…"
+            : "The Nova server is not answering yet — a sleeping free server can take about a minute to wake up. NASA maps keep loading meanwhile; terrain, routes and missions appear once it is online."}
+        </div>
+      )}
       <Sidebar />
       <main className="main">
         <ErrorBoundary key={`${planet}-${earthView}-${bodyView}`}>

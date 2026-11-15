@@ -40,6 +40,9 @@ class StacCollection:
     units_source: str
     docs_url: str
     notes: str
+    product_kind: str = "DTM"  # DTM (bare surface) or DSM (surface incl. buildings/vegetation)
+    source_imagery: str = ""  # images the elevation model was derived from; not the elevation model
+    coverage: str = ""
 
 
 # Height reference statements are quoted from the collection descriptions (read 2026-11-15).
@@ -53,6 +56,8 @@ COLLECTIONS: dict[str, StacCollection] = {
             units="m", units_source="PDS HiRISE DTM products store elevations in metres",
             docs_url=f"{DOCS_ROOT}/mars/hirise/",
             notes="Local stereo DTMs (~1-2 m posts) made by several producers; coverage and quality vary per product.",
+            source_imagery="HiRISE stereo images (~0.25-0.5 m/px); orthoimages at the image resolution are separate assets, not the DTM",
+            coverage="local, only where a HiRISE stereo pair was processed",
         ),
         StacCollection(
             id="mro_ctx_controlled_usgs_dtms", planet="MARS", instrument="MRO CTX", data_type="DEM",
@@ -62,6 +67,8 @@ COLLECTIONS: dict[str, StacCollection] = {
             docs_url=f"{DOCS_ROOT}/mars/ctxdtms/",
             notes=("Stereo DTMs at ~20 m posts from ~6 m CTX images. Local coverage only. The provider warns that some "
                    "DTMs are jittery or have large gaps and are then no improvement over MOLA."),
+            source_imagery="CTX stereo images (~6 m/px); the ~20 m DTM is coarser than the images",
+            coverage="local, only where a CTX stereo pair was processed",
         ),
         StacCollection(
             id="kaguya_terrain_camera_usgs_dtms_v2", planet="MOON", instrument="Kaguya/SELENE Terrain Camera", data_type="DEM",
@@ -71,7 +78,23 @@ COLLECTIONS: dict[str, StacCollection] = {
             docs_url=f"{DOCS_ROOT}/moon/kaguyatc_dtms/",
             notes=("Stereo DTMs between about 70N and 70S. Provider: mean vertical precision ~3 m, vertical offsets near "
                    "DTM edges; accuracy is reported per DTM (qa_metrics asset)."),
+            source_imagery="Kaguya Terrain Camera stereo images (~10 m/px)",
+            coverage="about 70S-70N in this collection; the poles are in the separate _southpolar/_northpolar collections",
         ),
+        *[
+            StacCollection(
+                id=f"kaguya_terrain_camera_usgs_dtms_v2_{pole}polar", planet="MOON", instrument="Kaguya/SELENE Terrain Camera",
+                data_type="DEM", level="REGIONAL",
+                vertical_datum="LOLA-aligned (provider: 'absolutely aligned to LOLA'); reference surface NOT_DOCUMENTED in the STAC item",
+                units="m", units_source="STAC raster band unit 'meters'",
+                docs_url=f"{DOCS_ROOT}/moon/kaguyatc_dtms/",
+                notes=(f"{pole.title()} polar Kaguya TC v2 DTMs in a polar stereographic projection (about 30 m). Coverage is "
+                       "patchy; permanently shadowed areas can lack stereo coverage."),
+                source_imagery="Kaguya Terrain Camera stereo images (~10 m/px)",
+                coverage=f"{pole} polar region (separate STAC collection), patchy",
+            )
+            for pole in ("south", "north")
+        ],
     ]
 }
 
@@ -164,6 +187,9 @@ def normalize_item(item: dict) -> dict | None:
         "source": "USGS Astrogeology Analysis Ready Data",
         "instrument": coll.instrument,
         "data_type": coll.data_type,
+        "product_kind": coll.product_kind,
+        "source_imagery": coll.source_imagery,
+        "coverage": coll.coverage,
         "level": coll.level,
         "format": "Cloud-Optimized GeoTIFF",
         "resolution_m": props.get("gsd"),

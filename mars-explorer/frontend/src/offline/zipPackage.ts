@@ -60,7 +60,7 @@ export async function buildMissionZip(opts: {
   const missionHazards = opts.hazards.filter((h) => h.mission === opts.mission.id);
   const json = (v: unknown) => strToU8(JSON.stringify(v, null, 2));
   const content: Record<string, Uint8Array> = {
-    "metadata/app.json": json({ app: "MARS EXPLORER", version: "0.2", coordinate_convention: MAP_COORDINATE_CONVENTION }),
+    "metadata/app.json": json({ app: "Nova", version: "0.5", coordinate_convention: MAP_COORDINATE_CONVENTION }),
     "imagery/README.txt": strToU8("No imagery tiles are included: NASA Trek / OSM tiles are streamed, not redistributed.\n"),
     "dem/datasets.json": json((opts.datasets ?? []).filter((d) => (d.planet ?? "MARS") === planet).map((d) => ({ name: d.name, checksum: d.checksum, crs_name: d.crs_name, vertical_datum: d.vertical_datum, resolution_meters: d.resolution_meters }))),
     "terrain/README.txt": strToU8("Derived terrain products are recomputed from the registered DEM; none are included.\n"),

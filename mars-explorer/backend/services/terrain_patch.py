@@ -129,10 +129,54 @@ def build_patch(ds, lon: float, lat: float, radius_m: float, max_dimension: int,
         "suitability": (
             "REGIONAL_OVERVIEW_ONLY" if native > 100 else "SITE_RECONNAISSANCE" if native > 2 else "DETAILED_STUDY"
         ),
+        **suitability_block(ds, native, radius_m, max(cell_x, cell_y)),
         "notes": [
             "Vertical exaggeration in the viewer is a visual aid only; values are true elevations.",
             "NoData cells are left empty, never interpolated.",
         ],
+    }
+
+
+# Engineering thresholds on the DEM's NATIVE cell spacing (metres). They decide what the terrain
+# can be used for; they are not certified astronaut safety limits. Override in settings.
+DEFAULT_SUITABILITY_THRESHOLDS = {"GLOBAL_OVERVIEW_ONLY": 1000.0, "REGIONAL_PLANNING_ONLY": 100.0, "LOCAL_TERRAIN_AVAILABLE": 5.0}
+
+
+def terrain_suitability(native_m: float | None) -> str:
+    """GLOBAL_OVERVIEW_ONLY | REGIONAL_PLANNING_ONLY | LOCAL_TERRAIN_AVAILABLE | HIGH_RESOLUTION_TERRAIN_AVAILABLE | NO_VALID_DEM."""
+    from django.conf import settings
+
+    t = {**DEFAULT_SUITABILITY_THRESHOLDS, **getattr(settings, "TERRAIN_SUITABILITY_THRESHOLDS", {})}
+    if not native_m:
+        return "NO_VALID_DEM"
+    if native_m > t["GLOBAL_OVERVIEW_ONLY"]:
+        return "GLOBAL_OVERVIEW_ONLY"
+    if native_m > t["REGIONAL_PLANNING_ONLY"]:
+        return "REGIONAL_PLANNING_ONLY"
+    if native_m > t["LOCAL_TERRAIN_AVAILABLE"]:
+        return "LOCAL_TERRAIN_AVAILABLE"
+    return "HIGH_RESOLUTION_TERRAIN_AVAILABLE"
+
+
+def suitability_block(ds, native_m: float, actual_radius_m: float, sample_spacing_m: float, requested_radius_m: float | None = None) -> dict:
+    cls = terrain_suitability(native_m)
+    mola = "MOLA" in f"{ds.instrument} {ds.name} {ds.product_id}".upper()
+    warnings = []
+    if cls in ("GLOBAL_OVERVIEW_ONLY", "REGIONAL_PLANNING_ONLY") or mola:
+        warnings += ["REGIONAL OVERVIEW ONLY", "NOT SUITABLE FOR LOCAL OBSTACLE AVOIDANCE"]
+    if requested_radius_m is not None and actual_radius_m > requested_radius_m * 1.001:
+        warnings.append(f"REQUESTED {requested_radius_m:,.0f} m RADIUS; SHOWING {actual_radius_m:,.0f} m BECAUSE THE DEM CELLS ARE {native_m:,.0f} m")
+    return {
+        "terrain_suitability": cls,
+        "extent": {
+            "requested_radius_m": requested_radius_m,
+            "actual_radius_m": round(actual_radius_m, 1),
+            "native_cell_spacing_m": round(native_m, 3),
+            "effective_sample_spacing_m": round(sample_spacing_m, 3),
+            "radius_expanded": requested_radius_m is not None and actual_radius_m > requested_radius_m * 1.001,
+        },
+        "data_warnings": warnings,
+        "coverage_note": "Coverage = cells with values; it does not mean features smaller than about two DEM cells are known.",
     }
 
 

@@ -30,6 +30,9 @@ export interface DemProduct {
   quality: { valid_percent?: number | null; qa_metrics_url?: string | null; note?: string };
   dem_available: boolean;
   imagery_available: boolean;
+  product_kind?: string;
+  source_imagery?: string;
+  coverage?: string;
   source_url: string | null;
   docs_url?: string;
   registered_dataset_id?: number | null;
@@ -79,3 +82,46 @@ export function formatResolution(m: number | null): string {
   if (m === null) return "resolution not stated";
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : m >= 10 ? `${Math.round(m)} m` : `${m.toFixed(2)} m`;
 }
+
+export interface PointCoverage {
+  planet: string;
+  coverage_status: "AVAILABLE" | "NO_DATA_COVERAGE" | "PROVIDER_ERROR";
+  best: DemProduct | null;
+  datasets: DemProduct[];
+  provider: { name: string; status: string; error?: string };
+}
+
+/** Elevation data at a point: registered DEMs plus the provider catalogue (no values are read). */
+export const getPointCoverage = (planet: PlanetId, lon: number, lat: number, signal?: AbortSignal, request: Request = apiRequest) =>
+  request<PointCoverage>("/datasets/coverage/", { query: { planet, longitude: lon.toFixed(6), latitude: lat.toFixed(6) }, signal, timeoutMs: 60_000 });
+
+export interface DerivedHazards {
+  status: string;
+  hazards: { category: string; lon_east_deg: number; lat_deg: number; radius_m: number; max_value: number | null; unit: string; cells: number }[];
+  dataset?: { name: string; resolution_m: number | null; instrument: string };
+  grid_cell_m?: number;
+  region_totals?: Record<string, number>;
+  not_derivable_from_dem?: Record<string, string>;
+  note?: string;
+  message?: string;
+}
+
+/** DEM-derived slope / roughness / no-data areas around a point (model estimates, not stored). */
+export const analyseTerrain = (
+  planet: PlanetId,
+  center: { lon: number; lat: number; crs: string },
+  radiusM: number,
+  signal?: AbortSignal,
+  request: Request = apiRequest,
+) =>
+  request<DerivedHazards>("/routes/hazards/derive/", {
+    method: "POST",
+    body: {
+      center: { lon_east_deg: center.lon, lat_deg: center.lat, crs: center.crs, latitude_convention: "AS_DECLARED_BY_SOURCE", planet },
+      radius_m: radiusM,
+      slope_limit_deg: 15,
+      terrain_source: "auto",
+    },
+    signal,
+    timeoutMs: 120_000,
+  });

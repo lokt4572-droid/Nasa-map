@@ -144,6 +144,14 @@ export function RouteOverlay() {
       f.setStyle(routeStyles.primary);
       src.addFeature(f);
     }
+    // Stretches crossing cells without DEM data (exploratory profile only): drawn distinctly.
+    for (const r of [result?.route, result?.alternative_route]) {
+      const parts = r?.unverified_geometry?.coordinates ?? [];
+      if (!parts.length) continue;
+      const f = new Feature(new MultiLineString(parts));
+      f.setStyle(new Style({ stroke: new Stroke({ color: "#ef5a4c", width: 5, lineDash: [4, 6] }) }));
+      src.addFeature(f);
+    }
     const pts: [string, string, typeof draft.start][] = [
       ["START", "#6fbf73", draft.start],
       ["END", "#ef5a4c", draft.end],

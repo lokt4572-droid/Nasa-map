@@ -12,9 +12,9 @@
 import { useEffect, useState } from "react";
 
 export const PAGES = {
-  home: { path: "/", title: "MARS EXPLORER" },
-  rover: { path: "/rover/", title: "Curiosity rover — MARS EXPLORER" },
-  map: { path: "/map/", title: "Map — MARS EXPLORER" },
+  home: { path: "/", title: "Nova" },
+  rover: { path: "/rover/", title: "Curiosity rover — Nova" },
+  map: { path: "/map/", title: "Map — Nova" },
 } as const;
 
 export type PageId = keyof typeof PAGES | "notfound";
@@ -63,7 +63,7 @@ export function usePage(): PageId {
     };
   }, []);
   useEffect(() => {
-    document.title = page === "notfound" ? "Page not found — MARS EXPLORER" : PAGES[page].title;
+    document.title = page === "notfound" ? "Page not found — Nova" : PAGES[page].title;
   }, [page]);
   return page;
 }

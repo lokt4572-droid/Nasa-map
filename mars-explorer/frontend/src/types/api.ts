@@ -286,6 +286,10 @@ export interface RouteSummary {
   // v0.4
   geometry_display?: { type: "MultiLineString"; coordinates: [number, number][][] };
   validation?: { valid: boolean; problems: string[]; checked_steps: number };
+  // v0.5
+  unverified_geometry?: { type: "MultiLineString"; coordinates: [number, number][][] };
+  source_validation?: { status: "VALIDATED" | "INVALID_ROUTE"; problems: string[]; source: { dataset: string; native_resolution_m: number | null; sample_spacing_m: number; samples: number } };
+  metrics_basis?: string;
 }
 
 export type CalculationStatus =
@@ -322,6 +326,7 @@ export interface RoutePlanResponse {
   data_quality: RouteDataQuality;
   // v0.4
   calculation_status?: CalculationStatus;
+  validation_status?: "VALIDATED";
   route_class?: string;
   planning_level?: { level: number; name: string };
   route_label?: string;

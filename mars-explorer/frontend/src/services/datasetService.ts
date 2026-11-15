@@ -98,7 +98,7 @@ export interface TerrainRender {
   dataset: string;
 }
 export async function fetchTerrainRender(
-  params: { dataset: number; product: string; bbox: [number, number, number, number]; width: number; height: number },
+  params: { dataset: number; product: string; bbox: [number, number, number, number]; width: number; height: number; crs?: string; range?: [number, number] },
   signal?: AbortSignal,
 ): Promise<TerrainRender> {
   const q = new URLSearchParams({
@@ -107,7 +107,8 @@ export async function fetchTerrainRender(
     bbox: params.bbox.map((v) => v.toFixed(6)).join(","),
     width: String(params.width),
     height: String(params.height),
-    crs: TREK_DECLARED_CRS,
+    crs: params.crs ?? TREK_DECLARED_CRS,
+    ...(params.range ? { range: params.range.map((v) => v.toFixed(3)).join(",") } : {}),
   });
   let res: Response;
   try {

@@ -4,6 +4,7 @@ import { formatLat, formatLon } from "../../config/marsProjection";
 import { describeError } from "../../services/api";
 import { type WeatherEnvelope, getCurrentWeather } from "../../services/earthService";
 import { useAppStore } from "../../store/useAppStore";
+import LocalTerrain3D from "../terrain/LocalTerrain3D";
 import TerrainInfo from "../terrain/TerrainInfo";
 
 /** Right-hand details for a selected Earth point: coordinates, elevation, weather, local time. */
@@ -72,6 +73,7 @@ export default function EarthPointPanel() {
       </dl>
       <h4 className="subhead">Elevation</h4>
       <TerrainInfo compact />
+      <LocalTerrain3D />
     </aside>
   );
 }

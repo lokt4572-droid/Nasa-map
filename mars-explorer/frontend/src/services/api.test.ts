@@ -41,3 +41,12 @@ describe("apiRequest", () => {
     await expect(apiRequest("/hazards/1/", { method: "DELETE" }, f)).resolves.toBeUndefined();
   });
 });
+
+describe("API base URL (v0.4 deployment)", () => {
+  it("uses the configured URL, else same-origin in production, else the local backend", async () => {
+    const { resolveApiBase } = await import("./api");
+    expect(resolveApiBase("https://api.example.org/api/v1/", true)).toBe("https://api.example.org/api/v1");
+    expect(resolveApiBase("  ", true)).toBe("/api/v1");
+    expect(resolveApiBase(undefined, false)).toBe("http://127.0.0.1:8000/api/v1");
+  });
+});

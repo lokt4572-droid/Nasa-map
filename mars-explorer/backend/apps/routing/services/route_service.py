@@ -151,15 +151,15 @@ def _candidate_dems(points, query_crs, lat_conv, planet, only_id=None, terrain_s
         per_point.append({d.id: d for d in dataset_manager.datasets_covering(p["lon_east_deg"], p["lat_deg"], query_crs, lat_convention=lat_conv, planet=planet)})
     notes: list[str] = []
     if terrain_source == "auto" and not only_id:
-        from apps.datasets.services import dataset_discovery, stac_client
+        from apps.datasets.services import catalogues, dataset_discovery
 
         try:
-            first = stac_client.search(planet, point=(points[0]["lon_east_deg"], points[0]["lat_deg"]), data_type="DEM")["products"]
+            first = catalogues.search(planet, point=(points[0]["lon_east_deg"], points[0]["lat_deg"]), data_type="DEM")["products"]
             best_local = min((d.resolution_meters or float("inf") for d in per_point[0].values() if all(d.id in s for s in per_point)), default=float("inf"))
             for rec in first:
                 if (rec["resolution_m"] or float("inf")) >= best_local:
                     break
-                if not all(stac_client.point_in_footprint(rec["footprint"], p["lon_east_deg"], p["lat_deg"]) for p in points):
+                if not all(catalogues.point_in_footprint(rec["footprint"], p["lon_east_deg"], p["lat_deg"]) for p in points):
                     continue
                 try:
                     ds = dataset_discovery.register_remote_dem(rec)
@@ -170,7 +170,7 @@ def _candidate_dems(points, query_crs, lat_conv, planet, only_id=None, terrain_s
                     s[ds.id] = ds
                 notes.append(f"Using catalogue DTM {rec['product_id']} ({rec['instrument']}) read remotely")
                 break
-        except stac_client.StacError as exc:
+        except catalogues.StacError as exc:
             notes.append(f"Provider catalogue not available ({exc}); registered DEMs only")
     common = [d for d_id, d in per_point[0].items() if all(d_id in s for s in per_point[1:])]
     if only_id:
@@ -228,6 +228,41 @@ def plan_request(v: dict, raw_request) -> Response:
             return _failure("PROCESSING_ERROR", "The remote DEM could not be read from its provider", {"dataset": ds.name}, http=502, calc="INVALID_DATASET")
         raise ApiError(str(exc), code="DEM_READ_ERROR", status_code=500) from exc
 
+    # Independent check of each final line on the original DEM (not the search grid).
+    from .route_validator import validate_on_source
+
+    hz_buf = [(lon, lat, r + profile.hazard_buffer_m) for lon, lat, r in hazards]
+    for key in ("route", "return_route", "alternative_route"):
+        r = result.get(key)
+        if r:
+            r["source_validation"] = validate_on_source(ds, r["geometry"]["coordinates"], query_crs, lat_conv, profile, hz_buf)
+    if result["route"]["source_validation"]["status"] != "VALIDATED":
+        sv = result["route"]["source_validation"]
+        return _failure("INVALID_ROUTE", "The route found on the search grid failed the check on the original DEM; it is not returned",
+                        {"problems": sv["problems"], "source": sv["source"], "dataset": ds.name}, calc="INVALID_ROUTE")
+    for key in ("return_route", "alternative_route"):  # keep only alternatives that also pass
+        r = result.get(key)
+        if r and r["source_validation"]["status"] != "VALIDATED":
+            result[f"{key}_rejected"] = {"reason": "failed the check on the original DEM", "problems": r["source_validation"]["problems"]}
+            result[key] = None
+    # Displayed metrics and profile come from the displayed line sampled on the source DEM.
+    for key in ("route", "return_route", "alternative_route"):
+        r = result.get(key)
+        if not r:
+            continue
+        sv = r["source_validation"]
+        r["grid_metrics"] = {k: r["metrics"].get(k) for k in ("distance_m", "distance_3d_m", "elevation_gain_m", "elevation_loss_m", "max_step_grade_deg")}
+        sm = sv["metrics"]
+        r.update(distance_m=sm["distance_m"], distance_3d_m=sm["distance_3d_m"], total_ascent_m=sm["total_ascent_m"],
+                 total_descent_m=sm["total_descent_m"], elevation_profile=sv["elevation_profile"])
+        r["metrics"].update(distance_m=sm["distance_m"], distance_3d_m=sm["distance_3d_m"], total_ascent_m=sm["total_ascent_m"],
+                            total_descent_m=sm["total_descent_m"], elevation_gain_m=sm["total_ascent_m"], elevation_loss_m=sm["total_descent_m"],
+                            average_slope_deg=sm["average_step_grade_deg"],
+                            maximum_slope_deg=max(sm["maximum_step_grade_deg"], r["metrics"].get("max_cell_slope_deg") or 0.0),
+                            max_step_grade_deg=sm["maximum_step_grade_deg"])
+        r["metrics_basis"] = (f"displayed line sampled every {sv['source']['sample_spacing_m']:g} m on {sv['source']['dataset']} "
+                              "(cost and terrain cost from the search grid)")
+    result["comparison"] = pathfinder.compare_routes(result["route"], result.get("alternative_route"))
     result["data_quality"] = _data_quality(ds, result["grid"], lat_conv, result["route"])
     for key in ("route", "return_route", "alternative_route"):
         _route_metrics_with_dem(result.get(key), ds, result["grid"], result["data_quality"]["planning_scope"])
@@ -244,6 +279,7 @@ def plan_request(v: dict, raw_request) -> Response:
         warnings.append(f"Provider quality of the DEM: {ds.quality_status}")
     result.update(
         calculation_status="CALCULATED",
+        validation_status="VALIDATED",
         route_class=scope["scope"],
         planning_level=PLANNING_LEVEL.get(scope["scope"], {"level": 1, "name": "REGIONAL"}),
         route_label=route_comparison.route_label(result["route"], profile),

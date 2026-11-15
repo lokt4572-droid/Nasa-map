@@ -10,6 +10,7 @@ router.register("datasets", DatasetViewSet, basename="dataset")
 urlpatterns = [
     # Before the router so "search" is not taken for a dataset id.
     path("datasets/search/", discovery_views.search, name="dataset-search"),
+    path("datasets/registry/", discovery_views.data_registry, name="dataset-registry"),
     path("datasets/coverage/", discovery_views.point_coverage, name="dataset-coverage"),
     path("datasets/register-remote/", discovery_views.register_remote, name="dataset-register-remote"),
     path("coverage/<str:planet_id>/", discovery_views.planet_coverage, name="coverage-planet"),

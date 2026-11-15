@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 
 import { describeError } from "../../services/api";
-import { type GibsLayer, dateAvailable, getGibsLayers, stepDate } from "../../services/earthService";
+import { type GibsLayer, dateAvailable, getGibsLayers, stepDate, subDailyTimes, timeValue } from "../../services/earthService";
 import { useAppStore } from "../../store/useAppStore";
 
-const GROUP_LABEL = { SATELLITE: "Satellite imagery", ATMOSPHERE: "Atmosphere", PRECIPITATION: "Precipitation", REFERENCE: "Reference" };
+const GROUP_LABEL = { SATELLITE: "Satellite imagery", ATMOSPHERE: "Atmosphere", PRECIPITATION: "Precipitation", REFERENCE: "Reference", GEOSTATIONARY: "Geostationary (10-minute, regional discs)" };
 
 /** Loads the GIBS discovery once per session (backend caches the capabilities for 24 h). */
 export function useGibsDiscovery() {
@@ -24,7 +24,7 @@ function DateControl({ layer }: { layer: GibsLayer }) {
   const setEarth = useAppStore((s) => s.setEarth);
   const t = layer.time;
   if (!t) return <div className="hint small">Static layer (no time dimension).</div>;
-  if (!t.daily) return <div className="warn-text small">Sub-daily layer: date selection not supported in this version.</div>;
+  if (!t.daily) return <SubDailyControl layer={layer} />;
   const latest = (t.latest ?? "").slice(0, 10);
   const date = (dates[layer.id] ?? latest).slice(0, 10);
   const ok = dateAvailable(t, date);
@@ -48,6 +48,44 @@ function DateControl({ layer }: { layer: GibsLayer }) {
         GetCapabilities; recent days may be partial. Not live.
       </div>
       {!ok && <div className="warn-text small">No imagery published for {date} (gap in the time domain). Layer hidden.</div>}
+    </div>
+  );
+}
+
+/** Time picker for sub-daily layers: only the timestamps GIBS publishes (UTC). */
+function SubDailyControl({ layer }: { layer: GibsLayer }) {
+  const dates = useAppStore((s) => s.earth.dates);
+  const setEarth = useAppStore((s) => s.setEarth);
+  const times = subDailyTimes(layer.time, 144);
+  const current = timeValue(layer, dates[layer.id]);
+  const i = current ? times.indexOf(current) : -1;
+  const set = (v: string | undefined) => v && setEarth({ dates: { ...dates, [layer.id]: v } });
+  if (!times.length) return <div className="warn-text small">No sub-daily times are published for this layer right now.</div>;
+  const period = layer.time?.intervals[layer.time.intervals.length - 1]?.period ?? "";
+  return (
+    <div className="date-control" data-testid={`subdaily-${layer.id}`}>
+      <div className="layer-card__row">
+        <button className="btn btn--small btn--ghost" onClick={() => set(times[i + 1])} disabled={i < 0 || i >= times.length - 1} title="Earlier published time">
+          ◀
+        </button>
+        <select value={current ?? ""} onChange={(e) => set(e.target.value)} aria-label={`Time for ${layer.title}`}>
+          {times.map((t) => (
+            <option key={t} value={t}>
+              {t.replace("T", " ").replace(":00Z", " UTC")}
+            </option>
+          ))}
+        </select>
+        <button className="btn btn--small btn--ghost" onClick={() => set(times[i - 1])} disabled={i <= 0} title="Later published time">
+          ▶
+        </button>
+        <button className="btn btn--small btn--ghost" onClick={() => set(times[0])}>
+          Latest
+        </button>
+      </div>
+      <div className="hint small">
+        Published every {period.replace("PT", "").toLowerCase()} (GetCapabilities); only listed times exist. Latest: {times[0]!.replace("T", " ").replace(":00Z", " UTC")}. Not live.
+        {layer.coverage ? ` Coverage: ${layer.coverage}; no data outside this disc.` : ""}
+      </div>
     </div>
   );
 }

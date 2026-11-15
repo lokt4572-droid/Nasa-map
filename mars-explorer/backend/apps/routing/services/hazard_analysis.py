@@ -30,16 +30,16 @@ NOT_DERIVABLE = {
 }
 
 
-def _regions(mask: np.ndarray, max_regions: int) -> list[np.ndarray]:
-    """Connected regions (8-neighbourhood) of a boolean mask, largest first."""
+def _regions(mask: np.ndarray, max_regions: int) -> tuple[list[np.ndarray], int]:
+    """Connected regions (8-neighbourhood) of a boolean mask, largest first, and their total count."""
     from scipy import ndimage
 
     labels, n = ndimage.label(mask, structure=np.ones((3, 3), dtype=int))
     if n == 0:
-        return []
+        return [], 0
     sizes = ndimage.sum(mask, labels, index=np.arange(1, n + 1))
     order = np.argsort(sizes)[::-1][:max_regions]
-    return [np.argwhere(labels == k + 1) for k in order]
+    return [np.argwhere(labels == k + 1) for k in order], int(n)
 
 
 def derive_hazards(grid: TerrainGrid, slope_limit_deg: float, roughness_limit_m: float | None = None,
@@ -48,9 +48,12 @@ def derive_hazards(grid: TerrainGrid, slope_limit_deg: float, roughness_limit_m:
     and areas without data. Coordinates are returned in the grid's dataset CRS (cell centres)."""
     cell_m = float(max(grid.dx_m.max(), grid.dy_m.mean()))
     out: list[dict] = []
+    totals: dict[str, int] = {}
 
     def add(mask: np.ndarray, category: str, layer: np.ndarray | None, unit: str, limit: float | None):
-        for cells in _regions(mask, max_regions):
+        regions, total = _regions(mask, max_regions)
+        totals[category] = total
+        for cells in regions:
             if len(cells) < min_cells:
                 continue
             ci, cj = cells.mean(axis=0)
@@ -79,6 +82,8 @@ def derive_hazards(grid: TerrainGrid, slope_limit_deg: float, roughness_limit_m:
     add(np.isnan(grid.z), "MISSING_DATA", None, "", None)
     return {
         "hazards": out,
+        "region_totals": totals,
+        "truncated": {c: n for c, n in totals.items() if n > max_regions},
         "grid_cell_m": cell_m,
         "derivable_from_dem": DERIVABLE,
         "not_derivable_from_dem": NOT_DERIVABLE,

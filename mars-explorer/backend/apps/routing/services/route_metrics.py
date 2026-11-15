@@ -49,6 +49,7 @@ def summarize(grid: TerrainGrid, cells: list[tuple[int, int]], ds_lat_conv: str,
     slope_sum = slope_len = 0.0  # distance-weighted mean of the step grades
     rough_vals: list[float] = []
     unverified: list[list[float]] = []  # [from_m, to_m] along the route
+    unknown_lines: list[list[list[float]]] = []  # steps touching a cell without DEM data
     prev = None
     for i, j in cells:
         x, y = grid.xy_of(i, j)
@@ -61,6 +62,7 @@ def summarize(grid: TerrainGrid, cells: list[tuple[int, int]], ds_lat_conv: str,
             d = grid.step_length(pi, pj, i, j)
             zp = grid.z[pi, pj]
             if math.isnan(zc) or math.isnan(zp):
+                unknown_lines.append([coords[-2], coords[-1]])
                 unknown_dist += d
                 dist3 += d
                 if unverified and abs(unverified[-1][1] - dist) < 1e-6:
@@ -98,6 +100,7 @@ def summarize(grid: TerrainGrid, cells: list[tuple[int, int]], ds_lat_conv: str,
         "max_step_grade_deg": max_grade,
         "unknown_terrain_distance_m": unknown_dist,
         "unknown_terrain_fraction": (unknown_dist / dist) if dist > 0 else 0.0,
+        "unverified_geometry": {"type": "MultiLineString", "coordinates": unknown_lines},
         "unverified_segments": [{"from_m": round(a, 2), "to_m": round(b, 2), "status": "UNVERIFIED_NO_DEM_DATA"} for a, b in unverified],
         "max_cell_slope_deg": max_cell_slope,
         "average_step_grade_deg": (slope_sum / slope_len) if slope_len > 0 else 0.0,

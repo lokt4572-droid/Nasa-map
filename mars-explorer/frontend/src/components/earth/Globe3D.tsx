@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { formatDistance, formatLat, formatLon } from "../../config/marsProjection";
 import { describeIonError } from "../../services/planetary/cesiumSceneService";
-import { dateAvailable, gibsXyzTemplate } from "../../services/earthService";
+import { dateAvailable, gibsXyzTemplate, timeValue } from "../../services/earthService";
 import { geolocation } from "../../services/geolocationService";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -68,6 +68,8 @@ export default function Globe3D() {
   measureRef.current = measure;
   const earth = useAppStore((s) => s.earth);
   const cfg = globeConfig(TOKEN);
+  const [elevationCheck, setElevationCheck] = useState<{ state: "AVAILABLE" | "MISSING" | "PENDING"; heightM: number | null; at: Date | null }>({ state: "PENDING", heightM: null, at: null });
+  const [imagery, setImagery] = useState<{ state: "READY" | "FAILED" | "LOADING"; at: Date | null }>({ state: "LOADING", at: null });
   const [terrainState, setTerrainState] = useState<{ state: "NOT_REQUESTED" | "REQUESTED" | "LOADED" | "FAILED"; error: string | null }>({
     state: cfg.tokenPresent ? "REQUESTED" : "NOT_REQUESTED",
     error: null,
@@ -89,7 +91,19 @@ export default function Globe3D() {
         // provider's own normals (both are optional extensions of Cesium World Terrain).
         const terrain = cfg.terrain === "CESIUM_WORLD_TERRAIN" ? C.Terrain.fromWorldTerrain({ requestWaterMask: true, requestVertexNormals: true }) : undefined;
         if (terrain) {
-          terrain.readyEvent.addEventListener(() => !destroyed && setTerrainState({ state: "LOADED", error: null }));
+          terrain.readyEvent.addEventListener((provider: import("cesium").TerrainProvider) => {
+            if (destroyed) return;
+            setTerrainState({ state: "LOADED", error: null });
+            // Prove real elevations arrive: sample a known summit (Mount Everest, 8848.86 m; the
+            // value is an ellipsoidal height from render tiles, so a few tens of metres differ).
+            C.sampleTerrainMostDetailed(provider, [C.Cartographic.fromDegrees(86.92527, 27.98806)])
+              .then(([c]) => {
+                if (destroyed) return;
+                const h = c?.height ?? NaN;
+                setElevationCheck({ state: Number.isFinite(h) && h > 8000 ? "AVAILABLE" : "MISSING", heightM: Number.isFinite(h) ? h : null, at: new Date() });
+              })
+              .catch(() => !destroyed && setElevationCheck({ state: "MISSING", heightM: null, at: new Date() }));
+          });
           terrain.errorEvent.addEventListener((err: unknown) => {
             if (destroyed) return;
             // Requested but not delivered: say so and fall back to the smooth ellipsoid.
@@ -131,6 +145,12 @@ export default function Globe3D() {
             useAppStore.getState().selectPoint({ lon: p.lon, lat: p.lat, crs: "EPSG:4326", layerId: "", pickedAt: new Date().toISOString() });
           }
         }, C.ScreenSpaceEventType.LEFT_CLICK);
+        let seen = false;
+        viewer.scene.globe.tileLoadProgressEvent.addEventListener((pending: number) => {
+          if (destroyed) return;
+          if (pending > 0) seen = true;
+          else if (seen) setImagery((s) => (s.state === "FAILED" ? s : { state: "READY", at: new Date() }));
+        });
         setStatus({ state: "ready", error: null });
       } catch (err) {
         setStatus({ state: "error", error: err instanceof Error ? err.message : String(err) });
@@ -156,7 +176,7 @@ export default function Globe3D() {
     const addGibs = (id: string, alpha: number) => {
       const l = gibs.find((x) => x.id === id && x.status === "AVAILABLE");
       if (!l) return;
-      const date = l.time ? (earth.dates[id] ?? l.time.latest)?.slice(0, 10) ?? null : null;
+      const date = timeValue(l, earth.dates[id]);
       if (l.time && (!date || !dateAvailable(l.time, date))) return;
       const provider = new C.UrlTemplateImageryProvider({
         url: gibsXyzTemplate(l, date),
@@ -164,6 +184,7 @@ export default function Globe3D() {
         maximumLevel: l.max_zoom ?? 9,
         credit: `${l.attribution} — ${l.title}${date ? ` (${date})` : ""}`,
       });
+      provider.errorEvent.addEventListener(() => setImagery({ state: "FAILED", at: new Date() }));
       layers.addImageryProvider(provider).alpha = alpha;
     };
     if (earth.base === "OSM") {
@@ -218,6 +239,32 @@ export default function Globe3D() {
         {terrainState.state === "NOT_REQUESTED" && `${cfg.message} `}
         Imagery overlays are draped on the surface — not a 3D atmospheric simulation.
       </div>
+      <dl className="earth-diag" data-testid="earth-3d-diagnostics">
+        <dt>3D GLOBE</dt>
+        <dd>{status.state === "ready" ? "READY" : status.state === "error" ? "FAILED" : "LOADING"}</dd>
+        <dt>TERRAIN PROVIDER</dt>
+        <dd>{terrainState.state === "LOADED" ? "READY (Cesium World Terrain)" : terrainState.state === "FAILED" ? "FAILED" : terrainState.state === "REQUESTED" ? "LOADING" : "NOT CONFIGURED"}</dd>
+        <dt>ELEVATION DATA</dt>
+        <dd>
+          {terrainState.state !== "LOADED"
+            ? "MISSING — EARTH ELLIPSOID DISPLAYED, REAL TERRAIN NOT AVAILABLE"
+            : elevationCheck.state === "AVAILABLE"
+              ? `AVAILABLE (check: Everest summit ${elevationCheck.heightM!.toFixed(0)} m)`
+              : elevationCheck.state === "MISSING"
+                ? "MISSING (terrain provider returned no elevation at the check point)"
+                : "checking…"}
+        </dd>
+        <dt>IMAGERY</dt>
+        <dd>{imagery.state}</dd>
+        <dt>LAST TERRAIN UPDATE</dt>
+        <dd>{elevationCheck.at ? elevationCheck.at.toISOString().replace("T", " ").slice(0, 19) + " UTC" : "—"}</dd>
+        {terrainState.state !== "LOADED" && (
+          <>
+            <dt>LOCAL TERRAIN</dt>
+            <dd>LOCAL EARTH TERRAIN AVAILABLE from Copernicus GLO-30 (2D map → click a land point → Local 3D)</dd>
+          </>
+        )}
+      </dl>
       <details className="globe-attribution">
         <summary>TERRAIN AND IMAGERY SOURCES</summary>
         <p>

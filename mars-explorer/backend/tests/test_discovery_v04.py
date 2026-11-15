@@ -22,6 +22,7 @@ from .raster_fixtures import TempDirMixin, requires_raster, write_geotiff
 
 HOST = "astrogeo-ard.s3-us-west-2.amazonaws.com"
 URL = f"https://{HOST}/mars/fixture/FIXTURE_dtm.tif"
+HOLE_URL = f"https://{HOST}/mars/fixture/HOLE_dtm.tif"
 WEST, NORTH, PIX = 77.0, 19.0, 0.001  # 400 x 400 cells of ~59 m
 
 
@@ -152,9 +153,14 @@ class RemoteDemTests(TempDirMixin, TestCase):
         self.local = write_geotiff(self.tmp / "remote.tif", self.z, west=WEST, north=NORTH, pixel_deg=PIX)
         real_open = remote_raster.open_raster
 
+        hole = np.full((400, 400), -9999.0, dtype="float32")  # valid only in one corner: a data gap at the test point
+        hole[:40, :40] = 100.0
+        self.hole = write_geotiff(self.tmp / "hole.tif", hole, west=WEST, north=NORTH, pixel_deg=PIX)
+
         @contextmanager
         def opener(path):
-            with real_open(self.local if str(path) == URL else path) as src:
+            target = self.local if str(path) == URL else self.hole if str(path) == HOLE_URL else path
+            with real_open(target) as src:
                 yield src
 
         p = mock.patch.object(remote_raster, "open_raster", opener)
@@ -225,6 +231,15 @@ class RemoteDemTests(TempDirMixin, TestCase):
         sel = r.json()["selection"]
         self.assertEqual([s["product_id"] for s in sel["skipped_products"]], ["BROKEN"])
         self.assertEqual(r.json()["dataset"]["product_id"], "FIXTURE_A")
+
+    def test_data_gap_in_the_finest_product_falls_back_to_the_next(self):
+        gappy = stac_item("GAPPY", collection="mro_hirise_socet_dtms", gsd=1.0, href=HOLE_URL)
+        with self._with_catalogue([gappy, stac_item()]):
+            r = self.c.get("/api/v1/terrain/patch/", {"planet": "MARS", "lon": 77.2, "lat": 18.8, "source": "auto", "max_dimension": 16})
+        self.assertEqual(r.status_code, 200, r.content)
+        b = r.json()
+        self.assertEqual(b["dataset"]["product_id"], "FIXTURE_A")
+        self.assertEqual(b["selection"]["skipped_products"], [{"product_id": "GAPPY", "code": "DATA_GAP", "message": "the DTM has no valid values at this location"}])
 
     def test_no_coverage_is_reported_not_invented(self):
         with self._with_catalogue([]):

@@ -10,6 +10,7 @@ import {
   rampColor,
   type TerrainPatch,
 } from "../../services/localTerrainService";
+import { routeOnPatch } from "../../services/route3DService";
 import { deviceHints, meshDimensionFor } from "../../services/terrainMeshService";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -38,7 +39,9 @@ export default function LocalTerrain3D() {
   const [datasetId, setDatasetId] = useState<number | null>(null);
   const product = useAppStore((s) => s.terrainProduct);
   const [exaggeration, setExaggeration] = useState(1);
-  const [expanded, setExpanded] = useState(false);
+  const layout = useAppStore((s) => s.terrainView);
+  const setLayout = useAppStore((s) => s.setTerrainView);
+  const expanded = layout !== "panel";
   const [state, setState] = useState<State>({ status: "idle" });
 
   // --- load the patch (old requests are cancelled when the point or radius changes)
@@ -64,29 +67,49 @@ export default function LocalTerrain3D() {
     return () => ctrl.abort();
   }, [planet, point?.lon, point?.lat, radiusM, datasetId, product]);
 
+  // A whole-route view asks for a radius that covers the route.
+  const radiusRequest = useAppStore((s) => s.terrainRadiusRequest);
+  useEffect(() => {
+    if (radiusRequest) setRadiusM(radiusRequest.radiusM);
+  }, [radiusRequest]);
+
   // A new point starts again from the best available DEM.
   useEffect(() => setDatasetId(null), [planet, point?.lon, point?.lat]);
 
   useEffect(() => {
     if (!expanded) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setExpanded(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setLayout("panel");
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expanded]);
+  }, [expanded, setLayout]);
+
+  // Outline the patch on the 2D map so the 3D scene can be located on the map.
+  const setPatchBBox = useAppStore((s) => s.setTerrainPatchBBox);
+  useEffect(() => {
+    setPatchBBox(state.status === "ready" ? state.patch.bbox : null);
+  }, [state, setPatchBBox]);
+  useEffect(() => () => setPatchBBox(null), [setPatchBBox]);
 
   if (!point) return null;
 
   return (
-    <section className={`lt3d ${expanded ? "lt3d--expanded" : ""}`} data-testid="local-terrain-3d" aria-label="Local 3D terrain">
+    <section className={`lt3d ${layout === "expanded" ? "lt3d--expanded" : layout === "split" ? "lt3d--split" : ""}`} data-testid="local-terrain-3d" aria-label="Local 3D terrain">
       <div className="lt3d__head">
         <span className="lt3d__title">LOCAL 3D TERRAIN</span>
         <span className="mono muted">
           {formatLat(point.lat, 3)} {formatLon(point.lon, lonMode, 3)}
         </span>
         {state.status === "ready" && (
-          <button className="btn btn--small btn--ghost" onClick={() => setExpanded(!expanded)}>
-            {expanded ? "Close" : "Expand"}
-          </button>
+          <span className="lt3d__layout">
+            {layout !== "split" && (
+              <button className="btn btn--small btn--ghost" onClick={() => setLayout("split")} title="3D on the right, the 2D map stays visible with the patch outlined">
+                2D | 3D
+              </button>
+            )}
+            <button className="btn btn--small btn--ghost" onClick={() => setLayout(expanded ? "panel" : "expanded")}>
+              {expanded ? "Close" : "Expand"}
+            </button>
+          </span>
         )}
       </div>
       {state.status === "loading" && (
@@ -100,6 +123,19 @@ export default function LocalTerrain3D() {
           <strong>LOCAL 3D TERRAIN UNAVAILABLE</strong>
           <div>{state.code === "DEM_NOT_AVAILABLE" ? "No validated elevation dataset covers this location." : state.message}</div>
           <div className="muted small">The available imagery can still be inspected. No elevation model is shown instead: imagery colours are not elevations.</div>
+        </div>
+      )}
+      {state.status === "ready" && (state.patch.data_warnings?.length ?? 0) > 0 && (
+        <div className="lt3d__warn" role="alert" data-testid="terrain-data-warnings">
+          {state.patch.data_warnings!.map((w) => (
+            <div key={w}>{w}</div>
+          ))}
+          {state.patch.extent && (
+            <div className="small">
+              DEM cell {fmtM(state.patch.extent.native_cell_spacing_m)} · sample spacing {fmtM(state.patch.extent.effective_sample_spacing_m)} · area shown radius{" "}
+              {fmtM(state.patch.extent.actual_radius_m)} · {state.patch.terrain_suitability?.replaceAll("_", " ")}
+            </div>
+          )}
         </div>
       )}
       {state.status === "ready" && (
@@ -171,6 +207,8 @@ function TerrainScene({
   const api = useRef<{ setExaggeration: (e: number) => void; reset: () => void; northUp: () => void } | null>(null);
   const [webgl, setWebgl] = useState(true);
   const [triangles, setTriangles] = useState({ valid: 0, skipped: 0 });
+  const route = useAppStore((s) => s.routeResult.data);
+  const [routeCover, setRouteCover] = useState<{ a: number; b: number } | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -190,7 +228,43 @@ function TerrainScene({
     camera.position.copy(home);
 
     const geom = new THREE.BufferGeometry();
+    // Routes (A orange, B blue) drawn on the same grid as the mesh; rebuilt with the exaggeration.
+    const routeGroup = new THREE.Group();
+    scene.add(routeGroup);
+    const clearRoutes = () => {
+      for (const o of [...routeGroup.children]) {
+        routeGroup.remove(o);
+        const m = o as THREE.Mesh;
+        m.geometry?.dispose();
+        (m.material as THREE.Material | undefined)?.dispose();
+      }
+    };
+    const buildRoutes = (ex: number) => {
+      clearRoutes();
+      if (!route) return setRouteCover(null);
+      const cover = { a: 0, b: 0 };
+      const draw = (coords: [number, number][] | undefined, color: number, key: "a" | "b") => {
+        if (!coords?.length) return;
+        const r3 = routeOnPatch(patch, coords, ex);
+        cover[key] = r3.insideFraction;
+        for (const part of r3.parts) {
+          const g = new THREE.BufferGeometry();
+          g.setAttribute("position", new THREE.BufferAttribute(part, 3));
+          routeGroup.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color, depthTest: true })));
+        }
+        for (const [pt, c] of [[r3.start, 0x6fbf73], [r3.end, 0xef5a4c]] as const) {
+          if (key !== "a" || !pt) continue;
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.008, 12, 8), new THREE.MeshBasicMaterial({ color: c }));
+          m.position.set(pt[0], pt[1], pt[2]);
+          routeGroup.add(m);
+        }
+      };
+      draw(route.alternative_route?.geometry.coordinates, 0x5fb3d9, "b");
+      draw(route.route.geometry.coordinates, 0xff8c2e, "a");
+      setRouteCover(cover);
+    };
     const build = (ex: number) => {
+      buildRoutes(ex);
       const m = buildTerrainMesh(patch, ex);
       geom.setAttribute("position", new THREE.BufferAttribute(m.positions, 3));
       geom.setAttribute("color", new THREE.BufferAttribute(m.colors, 3));
@@ -264,14 +338,18 @@ function TerrainScene({
       cancelAnimationFrame(raf);
       ro.disconnect();
       ctl.dispose();
+      clearRoutes();
       geom.dispose();
       mat.dispose();
       frame.geometry.dispose();
       renderer.dispose();
+      // dispose() frees buffers and textures but keeps the WebGL context; release it explicitly so
+      // repeated view switches never pile up contexts (browsers cap them at about 16).
+      renderer.forceContextLoss();
       renderer.domElement.remove();
       api.current = null;
     };
-  }, [patch]);
+  }, [patch, route]);
 
   useEffect(() => {
     api.current?.setExaggeration(exaggeration);
@@ -283,6 +361,21 @@ function TerrainScene({
 
   return (
     <div className="lt3d__body">
+      {route && routeCover && routeCover.a === 0 && routeCover.b === 0 && (
+        <div className="hint small lt3d__routehint" data-testid="route-3d-status">SELECTED TERRAIN AREA DOES NOT INTERSECT THE ACTIVE ROUTE</div>
+      )}
+      {route && routeCover && (routeCover.a > 0 || routeCover.b > 0) && (
+        <div className="hint small lt3d__routehint" data-testid="route-3d-status">
+          <span style={{ color: "#ff8c2e" }}>Route A</span> {(routeCover.a * 100).toFixed(0)}% inside this patch
+          {route.alternative_route ? (
+            <>
+              {" · "}
+              <span style={{ color: "#5fb3d9" }}>Route B</span> {(routeCover.b * 100).toFixed(0)}%
+            </>
+          ) : null}{" "}
+          · heights from the terrain shown
+        </div>
+      )}
       <div className={`lt3d__view ${expanded ? "lt3d__view--big" : ""}`}>
         <div ref={hostRef} className="lt3d__host" aria-label="3D terrain mesh; drag to rotate, right-drag to pan, wheel to zoom" />
         {!webgl && <div className="lt3d__msg error-text">WebGL is not available; the 3D terrain cannot be drawn.</div>}

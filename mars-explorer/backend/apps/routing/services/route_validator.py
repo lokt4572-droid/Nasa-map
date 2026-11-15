@@ -106,3 +106,81 @@ def validate_route(grid: TerrainGrid, cells: list[tuple[int, int]], profile: Mov
             if abs(idx.get(b, 0) - idx.get(a, 0)) > 1 and not segment_clear(grid, a, b, profile):
                 problems.append(f"simplified segment {k} crosses an obstacle or NoData")
     return {"valid": not problems, "problems": problems, "checked_steps": max(0, len(cells) - 1)}
+
+
+MAX_SOURCE_SAMPLES = 20_000
+
+
+def densify_lonlat(coords: list[list[float]], spacing_m: float, geod) -> list[tuple[float, float]]:
+    """Points along the route at about ``spacing_m`` (geodesic), seam-aware, start and end included."""
+    out: list[tuple[float, float]] = []
+    for (lo1, la1), (lo2, la2) in zip(coords[:-1], coords[1:]):
+        d = geod.inv(lo1, la1, lo2, la2)[2]
+        n = max(1, int(math.ceil(d / max(spacing_m, 1e-6))))
+        mids = geod.npts(lo1, la1, lo2, la2, n - 1) if n > 1 else []
+        out.append((lo1, la1))
+        out.extend((((x + 180.0) % 360.0) - 180.0, y) for x, y in mids)
+    out.append(tuple(coords[-1]))
+    return out
+
+
+def validate_on_source(ds, coords: list[list[float]], query_crs, query_lat_conv: str, profile: MovementProfile,
+                       hazards_query: list[tuple[float, float, float]] = ()) -> dict:
+    """Second, independent check of the FINAL route line on the original DEM (not the search grid).
+
+    Samples the DEM along the displayed geometry at its native spacing, then checks NoData, the
+    grade of every step between samples against the profile limit, and hazard buffers; returns
+    metrics recomputed from these samples. Grades over one native cell are steeper than slopes
+    averaged over coarser cells, so this check is stricter than the search."""
+    import numpy as np
+    from pyproj import CRS, Geod
+
+    from services import raster_render
+
+    ell = CRS.from_wkt(ds.crs).ellipsoid
+    geod = Geod(a=ell.semi_major_metre, b=ell.semi_minor_metre)
+    native = float(ds.resolution_meters or 0.0) or 100.0
+    total = sum(geod.inv(a[0], a[1], b[0], b[1])[2] for a, b in zip(coords[:-1], coords[1:]))
+    spacing = max(native, total / MAX_SOURCE_SAMPLES)
+    pts = densify_lonlat(coords, spacing, geod)
+    lons = np.array([p[0] for p in pts])
+    lats = np.array([p[1] for p in pts])
+    budget = 4096
+    z = raster_render.sample_lonlat(ds, lons, lats, query_crs, query_lat_conv, max_read=(budget, budget))
+    step_d = np.asarray(geod.inv(lons[:-1], lats[:-1], lons[1:], lats[1:])[2], dtype="float64") if len(pts) > 1 else np.zeros(0)
+    dz = np.diff(z)
+    ok_step = np.isfinite(dz) & (step_d > 0)
+    grades = np.degrees(np.arctan2(np.abs(dz[ok_step]), step_d[ok_step])) if ok_step.any() else np.zeros(0)
+    nodata = ~np.isfinite(z)
+    problems: list[str] = []
+    if nodata.any() and not profile.allow_unknown_terrain:
+        problems.append(f"{int(nodata.sum())} of {len(z)} samples have no DEM value")
+    steep = int((grades > profile.max_slope_deg).sum())
+    if steep:
+        problems.append(f"{steep} step(s) steeper than {profile.max_slope_deg:g} deg (max {grades.max():.1f} deg) on the source DEM")
+    for hlon, hlat, r in hazards_query:
+        if r <= 0:
+            continue
+        dmin = float(np.min(geod.inv(lons, lats, np.full_like(lons, hlon), np.full_like(lats, hlat))[2]))
+        if dmin < r:
+            problems.append(f"passes {dmin:.0f} m from a hazard (buffered radius {r:.0f} m)")
+    valid_dz = dz[np.isfinite(dz)]
+    dist = float(step_d.sum())
+    cum = np.concatenate([[0.0], np.cumsum(step_d)])
+    idx = np.linspace(0, len(z) - 1, min(len(z), 500)).round().astype(int)
+    profile_pts = [{"distance_m": round(float(cum[i]), 2), "elevation_m": None if not np.isfinite(z[i]) else round(float(z[i]), 3)} for i in idx]
+    d3 = float(np.hypot(step_d[np.isfinite(dz)], dz[np.isfinite(dz)]).sum() + step_d[~np.isfinite(dz)].sum())
+    return {
+        "status": "VALIDATED" if not problems else "INVALID_ROUTE",
+        "problems": problems,
+        "source": {"dataset": ds.name, "native_resolution_m": ds.resolution_meters, "sample_spacing_m": round(spacing, 3),
+                   "samples": int(len(z)), "read_budget_px": budget},
+        "metrics": {
+            "distance_m": dist, "distance_3d_m": d3,
+            "total_ascent_m": float(valid_dz[valid_dz > 0].sum()), "total_descent_m": float(-valid_dz[valid_dz < 0].sum()),
+            "maximum_step_grade_deg": float(grades.max()) if grades.size else 0.0,
+            "average_step_grade_deg": float(np.average(grades, weights=step_d[ok_step])) if grades.size else 0.0,
+            "nodata_pct": round(100 * float(nodata.mean()), 3),
+        },
+        "elevation_profile": profile_pts,
+    }

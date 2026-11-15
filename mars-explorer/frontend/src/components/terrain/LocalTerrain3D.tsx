@@ -118,6 +118,19 @@ export default function LocalTerrain3D() {
           <div className="muted small">The available imagery can still be inspected. No elevation model is shown instead: imagery colours are not elevations.</div>
         </div>
       )}
+      {state.status === "ready" && (state.patch.data_warnings?.length ?? 0) > 0 && (
+        <div className="lt3d__warn" role="alert" data-testid="terrain-data-warnings">
+          {state.patch.data_warnings!.map((w) => (
+            <div key={w}>{w}</div>
+          ))}
+          {state.patch.extent && (
+            <div className="small">
+              DEM cell {fmtM(state.patch.extent.native_cell_spacing_m)} · sample spacing {fmtM(state.patch.extent.effective_sample_spacing_m)} · area shown radius{" "}
+              {fmtM(state.patch.extent.actual_radius_m)} · {state.patch.terrain_suitability?.replaceAll("_", " ")}
+            </div>
+          )}
+        </div>
+      )}
       {state.status === "ready" && (
         <TerrainScene
           patch={state.patch}

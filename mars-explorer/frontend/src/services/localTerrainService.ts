@@ -50,6 +50,11 @@ export interface PatchResponse {
   encoding: string;
   elevation: string;
   suitability: "REGIONAL_OVERVIEW_ONLY" | "SITE_RECONNAISSANCE" | "DETAILED_STUDY";
+  /** v0.5 */
+  terrain_suitability?: "GLOBAL_OVERVIEW_ONLY" | "REGIONAL_PLANNING_ONLY" | "LOCAL_TERRAIN_AVAILABLE" | "HIGH_RESOLUTION_TERRAIN_AVAILABLE" | "NO_VALID_DEM";
+  extent?: { requested_radius_m: number | null; actual_radius_m: number; native_cell_spacing_m: number; effective_sample_spacing_m: number; radius_expanded: boolean };
+  data_warnings?: string[];
+  coverage_note?: string;
   notes: string[];
   latitude?: { status: string; warning: string | null };
 }
@@ -118,13 +123,14 @@ export async function loadTerrainPatch(
   const hit = cache.get(key);
   if (hit) return hit;
   const request = opts.request ?? apiRequest;
-  const get = (r: number | "native") =>
+  const get = (r: number | "native", requested?: number) =>
     request<PatchResponse>("/terrain/patch/", {
       query: {
         planet,
         longitude: lon,
         latitude: lat,
         ...(r === "native" ? {} : { radius_m: Math.round(r) }),
+        ...(requested ? { requested_radius_m: Math.round(requested) } : {}),
         max_dimension: maxDim,
         ...(source === "auto" ? { source: "auto" } : {}),
         ...(opts.datasetId ? { dataset: opts.datasetId } : {}),
@@ -146,7 +152,7 @@ export async function loadTerrainPatch(
       if (err instanceof ApiError && err.code === "DEM_TOO_COARSE_FOR_PATCH" && d?.native_resolution_m) {
         const r2 = Math.min(MAX_RADIUS_M, (TARGET_NATIVE_CELLS * d.native_resolution_m) / 2);
         if (radius === "native" || r2 <= radius) throw err;
-        body = await get(r2);
+        body = await get(r2, radius); // the server reports the expansion explicitly
         adjusted = true;
       } else throw err;
     }

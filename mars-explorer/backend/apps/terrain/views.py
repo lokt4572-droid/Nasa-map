@@ -540,6 +540,8 @@ def patch(request):
             err.details["provider"] = selection["provider"]
         raise err
     _, lat_used, conv = dataset_manager.point_for_dataset(lon, lat, lat_conv, ds)
+    req_r = float(qp["requested_radius_m"]) if qp.get("requested_radius_m") else (float(qp["radius_m"]) if qp.get("radius_m") else None)
+    body.update(terrain_patch.suitability_block(ds, float(ds.resolution_meters or 0), body["radius_m"], body["sample_spacing_m"], req_r))
     body["query"] = query
     body["selection"] = selection
     body["latitude"] = _latitude_info(conv, lat, lat_used, ds)

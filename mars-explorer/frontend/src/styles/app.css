@@ -408,3 +408,5 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .registry-scroll .cmp-table td { vertical-align: top; }
 .server-banner { position: fixed; top: 52px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(640px, calc(100% - 32px));
   background: rgba(40,34,14,.96); border: 1px solid var(--warn); color: var(--text); border-radius: var(--radius); padding: 6px 12px; font-size: 12px; }
+.lt3d__warn { margin: 6px 8px 0; padding: 6px 8px; border: 1px solid var(--warn); border-radius: var(--radius); color: var(--warn); font-size: 11.5px; font-weight: 600; letter-spacing: .03em; }
+.lt3d__warn .small { color: var(--text-dim); font-weight: 400; margin-top: 2px; }

@@ -440,7 +440,7 @@ export default function RoutePlanner() {
           Movement profile
           <select value={draft.profile} onChange={(e) => setRouteDraft({ profile: e.target.value as "CONSERVATIVE" | "STANDARD" })}>
             <option value="CONSERVATIVE">CONSERVATIVE</option>
-            <option value="STANDARD">STANDARD</option>
+            <option value="STANDARD">STANDARD — exploratory, not conservative</option>
           </select>
         </label>
         {profile && (
@@ -530,7 +530,11 @@ export default function RoutePlanner() {
               <span className="small">
                 {r.route_label}
                 {r.planning_level ? ` · planning level ${r.planning_level.level} (${r.planning_level.name})` : ""}
-                {r.route.validation ? (r.route.validation.valid ? " · re-validated on the DEM grid" : " · VALIDATION FAILED") : ""}
+                {r.route.source_validation
+                  ? r.route.source_validation.status === "VALIDATED"
+                    ? ` · VALIDATED on ${r.route.source_validation.source.dataset} every ${r.route.source_validation.source.sample_spacing_m.toFixed(1)} m`
+                    : " · VALIDATION FAILED"
+                  : ""}
               </span>
             </div>
           )}

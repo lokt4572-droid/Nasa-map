@@ -566,6 +566,26 @@ export default function RoutePlanner() {
           {expl.data && <ExplanationView e={expl.data} />}
           {expl.error && <div className="error-text small">Explanation failed: {expl.error}</div>}
           <div className="layer-card__actions">
+            <button
+              className="btn btn--small btn--ghost"
+              title="Local 3D terrain covering the whole route (one bounded patch; Route A orange, Route B blue)"
+              onClick={() => {
+                const pts = [...r.route.geometry.coordinates, ...(r.alternative_route?.geometry.coordinates ?? [])];
+                const lons = pts.map((p) => p[0]);
+                const lats = pts.map((p) => p[1]);
+                const lon = (Math.min(...lons) + Math.max(...lons)) / 2;
+                const lat = (Math.min(...lats) + Math.max(...lats)) / 2;
+                const R = planet === "EARTH" ? 6_371_000 : planet === "MOON" ? 1_737_400 : planet === "MERCURY" ? 2_439_400 : 3_389_500;
+                const halfDeg = Math.max((Math.max(...lats) - Math.min(...lats)) / 2, ((Math.max(...lons) - Math.min(...lons)) / 2) * Math.cos((lat * Math.PI) / 180));
+                const radius = Math.min(500_000, Math.max(250, halfDeg * (Math.PI / 180) * R * 1.15));
+                const st = useAppStore.getState();
+                st.selectPoint({ lon, lat, crs: draft.start?.crs ?? "", layerId: st.activeLayerId, pickedAt: new Date().toISOString() });
+                st.setTerrainRadiusRequest({ radiusM: Math.round(radius), seq: Date.now() });
+                st.setTerrainView("split");
+              }}
+            >
+              Route in 3D
+            </button>
             <button className="btn btn--small btn--ghost" disabled={expl.busy} onClick={() => void explain(r.id)}>
               {expl.busy ? "Explaining…" : "Explain this route"}
             </button>

@@ -136,6 +136,9 @@ interface AppState {
   setTerrainProduct: (p: string | null) => void;
   /** Local 3D terrain layout: in the point panel, enlarged, or side by side with the 2D map. */
   terrainView: "panel" | "expanded" | "split";
+  /** Requested radius for the next local 3D patch (e.g. a whole route); consumed by the viewer. */
+  terrainRadiusRequest: { radiusM: number; seq: number } | null;
+  setTerrainRadiusRequest: (r: AppState["terrainRadiusRequest"]) => void;
   setTerrainView: (v: "panel" | "expanded" | "split") => void;
   /** Ground area of the local 3D patch, outlined on the 2D map (lon/lat, map CRS). */
   terrainPatchBBox: { west: number; south: number; east: number; north: number } | null;
@@ -261,6 +264,8 @@ export const useAppStore = create<AppState>((set) => ({
   setTerrainProduct: (terrainProduct) => set({ terrainProduct }),
   terrainView: "panel",
   setTerrainView: (terrainView) => set({ terrainView }),
+  terrainRadiusRequest: null,
+  setTerrainRadiusRequest: (terrainRadiusRequest) => set({ terrainRadiusRequest }),
   terrainPatchBBox: null,
   setTerrainPatchBBox: (terrainPatchBBox) => set({ terrainPatchBBox }),
   setCoverageExplorerOpen: (coverageExplorerOpen) => set({ coverageExplorerOpen }),

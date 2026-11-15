@@ -414,3 +414,4 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
   background: rgba(24,27,31,.94); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 6px 8px; font-size: 10.5px; }
 .earth-diag dt { color: var(--text-faint); letter-spacing: .05em; }
 .earth-diag dd { margin: 0; }
+.lt3d__routehint { padding: 4px 8px 0; }

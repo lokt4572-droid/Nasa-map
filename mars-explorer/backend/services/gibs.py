@@ -44,6 +44,14 @@ WANTED: list[dict[str, str]] = [
     {"id": "OMI_Aerosol_Index", "group": "ATMOSPHERE", "title": "UV Aerosol Index (absorbing aerosols: dust, smoke), OMI", "instrument": "OMI", "platform": "Aura"},
     {"id": "AMSRU2_Columnar_Water_Vapor_Day", "group": "ATMOSPHERE", "title": "Columnar Water Vapor (Day), AMSR2", "instrument": "AMSR2", "platform": "GCOM-W1"},
     {"id": "IMERG_Precipitation_Rate", "group": "PRECIPITATION", "title": "Precipitation Rate (daily), GPM IMERG", "instrument": "GPM IMERG (multi-satellite)", "platform": "GPM constellation"},
+    # Sub-daily (published at 10-minute steps). Geostationary: each covers only its satellite's
+    # full disc, not the globe. Band 13 (10.3 um) is thermal infrared: day and night, not colour.
+    {"id": "GOES-East_ABI_Band13_Clean_Infrared", "group": "GEOSTATIONARY", "title": "Clean infrared, GOES-East ABI band 13 (10-minute)", "instrument": "ABI", "platform": "GOES-East",
+     "coverage": "GOES-East full disc (about 75 W): the Americas and the Atlantic"},
+    {"id": "GOES-West_ABI_Band13_Clean_Infrared", "group": "GEOSTATIONARY", "title": "Clean infrared, GOES-West ABI band 13 (10-minute)", "instrument": "ABI", "platform": "GOES-West",
+     "coverage": "GOES-West full disc (about 137 W): the eastern Pacific and western Americas"},
+    {"id": "Himawari_AHI_Band13_Clean_Infrared", "group": "GEOSTATIONARY", "title": "Clean infrared, Himawari AHI band 13 (10-minute)", "instrument": "AHI", "platform": "Himawari",
+     "coverage": "Himawari full disc (about 141 E): East Asia, Australia and the western Pacific"},
     {"id": "Reference_Labels_15m", "group": "REFERENCE", "title": "Place labels (reference)", "instrument": "—", "platform": "—"},
     {"id": "Reference_Features_15m", "group": "REFERENCE", "title": "Borders and roads (reference)", "instrument": "—", "platform": "—"},
     {"id": "Coastlines_15m", "group": "REFERENCE", "title": "Coastlines (reference)", "instrument": "—", "platform": "—"},

@@ -151,3 +151,38 @@ describe("Earth mode switching", () => {
     expect(useAppStore.getState().section).toBe("layers");
   });
 });
+
+describe("sub-daily GIBS times (v0.4)", () => {
+  // Interval copied from GIBS GetCapabilities (2026-11-14) for GOES-East ABI band 13.
+  const time = { default: null, daily: false, first: "2026-11-13T16:10:00Z", latest: "2026-11-14T08:30:00Z",
+                 intervals: [{ start: "2026-11-13T16:10:00Z", end: "2026-11-14T08:30:00Z", period: "PT10M" }] };
+  const layer = { id: "GOES-East_ABI_Band13_Clean_Infrared", time } as never;
+
+  it("parses sub-daily periods only", async () => {
+    const { subDailyStepMs } = await import("./services/earthService");
+    expect(subDailyStepMs("PT10M")).toBe(600_000);
+    expect(subDailyStepMs("PT1H")).toBe(3_600_000);
+    expect(subDailyStepMs("P1D")).toBeNull();
+    expect(subDailyStepMs("PT")).toBeNull();
+  });
+
+  it("lists only published steps, newest first, and defaults to the latest", async () => {
+    const { subDailyTimes, timeValue, dateAvailable } = await import("./services/earthService");
+    const t = subDailyTimes(time, 3);
+    expect(t).toEqual(["2026-11-14T08:30:00Z", "2026-11-14T08:20:00Z", "2026-11-14T08:10:00Z"]);
+    expect(subDailyTimes(time, 10_000)).toHaveLength(99); // 16:10 .. 08:30 inclusive
+    expect(timeValue(layer, undefined)).toBe("2026-11-14T08:30:00Z");
+    expect(timeValue(layer, "2026-11-14T08:20:00Z")).toBe("2026-11-14T08:20:00Z");
+    expect(timeValue(layer, "2026-11-14T08:25:00Z")).toBe("2026-11-14T08:30:00Z"); // not published -> latest
+    expect(dateAvailable(time, "2026-11-14T08:20:00Z")).toBe(true);
+    expect(dateAvailable(time, "2026-11-14T08:25:00Z")).toBe(false);
+    expect(dateAvailable(time, "2026-11-14T09:00:00Z")).toBe(false);
+  });
+
+  it("daily layers keep YYYY-MM-DD", async () => {
+    const { timeValue } = await import("./services/earthService");
+    const daily = { id: "x", time: { ...time, daily: true, latest: "2026-11-13", intervals: [{ start: "2000-01-01", end: "2026-11-13", period: "P1D" }] } } as never;
+    expect(timeValue(daily, undefined)).toBe("2026-11-13");
+    expect(timeValue(daily, "2026-11-01")).toBe("2026-11-01");
+  });
+});

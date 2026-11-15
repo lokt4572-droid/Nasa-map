@@ -24,7 +24,7 @@ import XYZ from "ol/source/XYZ";
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from "ol/style";
 
 import { formatDistance, normalizeLon180 } from "../../config/marsProjection";
-import { type GibsLayer, dateAvailable, gibsXyzTemplate } from "../../services/earthService";
+import { type GibsLayer, dateAvailable, gibsXyzTemplate, timeValue } from "../../services/earthService";
 import { geolocation } from "../../services/geolocationService";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -132,7 +132,7 @@ export default function EarthMap() {
     }
     const layer = earth.gibs.data?.layers.find((l) => l.id === earth.base && l.status === "AVAILABLE");
     if (!layer) return;
-    const date = layer.time ? earth.dates[layer.id] ?? layer.time.latest : null;
+    const date = timeValue(layer, earth.dates[layer.id]);
     if (layer.time && date && !dateAvailable(layer.time, date)) return; // never request dates outside the domain
     base.setSource(gibsSource(layer, date ? date.slice(0, 10) : null));
   }, [earth.base, earth.dates, earth.gibs.data]);
@@ -151,7 +151,7 @@ export default function EarthMap() {
     earth.overlays.forEach((id, i) => {
       const layer = earth.gibs.data?.layers.find((l) => l.id === id && l.status === "AVAILABLE");
       if (!layer) return;
-      const date = layer.time ? (earth.dates[id] ?? layer.time.latest)?.slice(0, 10) ?? null : null;
+      const date = timeValue(layer, earth.dates[id]);
       let tl = overlayGroup.current.get(id);
       if (!tl) {
         tl = new TileLayer({ zIndex: 10 + i });

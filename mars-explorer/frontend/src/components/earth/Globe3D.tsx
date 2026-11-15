@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { formatDistance, formatLat, formatLon } from "../../config/marsProjection";
 import { describeIonError } from "../../services/planetary/cesiumSceneService";
-import { dateAvailable, gibsXyzTemplate } from "../../services/earthService";
+import { dateAvailable, gibsXyzTemplate, timeValue } from "../../services/earthService";
 import { geolocation } from "../../services/geolocationService";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -156,7 +156,7 @@ export default function Globe3D() {
     const addGibs = (id: string, alpha: number) => {
       const l = gibs.find((x) => x.id === id && x.status === "AVAILABLE");
       if (!l) return;
-      const date = l.time ? (earth.dates[id] ?? l.time.latest)?.slice(0, 10) ?? null : null;
+      const date = timeValue(l, earth.dates[id]);
       if (l.time && (!date || !dateAvailable(l.time, date))) return;
       const provider = new C.UrlTemplateImageryProvider({
         url: gibsXyzTemplate(l, date),

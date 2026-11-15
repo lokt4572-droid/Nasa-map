@@ -48,6 +48,12 @@ class MovementProfile:
     hazard_buffer_m: float
     max_unknown_fraction: float  # reject routes with more unknown terrain than this (by distance)
     hazard_proximity_weight: float = 0.0
+    # Optional hard constraints (v0.4). None = not applied. They are mission configuration,
+    # not validated mobility limits.
+    max_roughness_m: float | None = None       # block cells whose TRI exceeds this
+    max_local_relief_m: float | None = None    # block cells whose 3x3 relief exceeds this
+    required_resolution_m: float | None = None  # refuse grids coarser than this
+    connectivity: int = 8                      # 8 (diagonals, no corner cutting) or 4
 
     @property
     def unknown_policy(self) -> str:

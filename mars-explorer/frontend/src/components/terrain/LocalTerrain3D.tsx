@@ -284,6 +284,9 @@ function TerrainScene({
       mat.dispose();
       frame.geometry.dispose();
       renderer.dispose();
+      // dispose() frees buffers and textures but keeps the WebGL context; release it explicitly so
+      // repeated view switches never pile up contexts (browsers cap them at about 16).
+      renderer.forceContextLoss();
       renderer.domElement.remove();
       api.current = null;
     };

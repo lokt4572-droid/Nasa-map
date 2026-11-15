@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "apps.weather",
     "apps.geocoding",
     "apps.earth",
+    "apps.ai",
 ]
 
 MIDDLEWARE = [
@@ -167,3 +168,15 @@ CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"
 
 # Files registered through the browser/API must be small; big DEMs go through the CLI.
 MAX_REGISTER_FILE_BYTES = int(os.environ.get("MAX_REGISTER_FILE_BYTES", str(500 * 1024 * 1024)))
+
+
+# Optional AI assistance (v0.4). The route engine never depends on it.
+#   AI_PROVIDER: rules (default: deterministic parser, no model) | ollama (local, free) |
+#                anthropic (remote; ANTHROPIC_API_KEY must be set in the BACKEND environment) | none
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "rules")
+AI_MODEL = os.environ.get("AI_MODEL", "")
+AI_BASE_URL = os.environ.get("AI_BASE_URL", "")
+AI_EFFORT = os.environ.get("AI_EFFORT", "medium")
+AI_TIMEOUT_S = float(os.environ.get("AI_TIMEOUT_S", "60"))
+# Ingest detections from an external, separately validated perception model (off by default).
+AI_PERCEPTION_INGEST_ENABLED = os.environ.get("AI_PERCEPTION_INGEST_ENABLED", "0") in ("1", "true", "True")

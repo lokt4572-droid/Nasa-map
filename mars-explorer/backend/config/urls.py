@@ -12,6 +12,7 @@ api_v1 = [
     path("weather/", include("apps.weather.urls")),
     path("geocoding/", include("apps.geocoding.urls")),
     path("earth/", include("apps.earth.urls")),
+    path("ai/", include("apps.ai.urls")),
 ]
 
 urlpatterns = [

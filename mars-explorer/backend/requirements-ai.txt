@@ -1,0 +1,3 @@
+# Optional: only needed for AI_PROVIDER=anthropic. The planner and every other feature work
+# without it. AI_PROVIDER=rules (default) and AI_PROVIDER=ollama need no extra package.
+anthropic>=1.0

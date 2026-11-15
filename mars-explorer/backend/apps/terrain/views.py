@@ -425,6 +425,9 @@ def _float_param(request, name: str, default: float, lo: float, hi: float) -> fl
     return val
 
 
+MAX_AUTO_TRIES = 4  # DEMs tried per patch request
+
+
 def _auto_radius(ds, max_dim: int, limits: tuple[float, float]) -> float:
     """Radius that shows the DEM at its own resolution (one mesh cell per DEM cell)."""
     native = float(ds.resolution_meters or 0.0)
@@ -478,48 +481,65 @@ def patch(request):
         except catalogues.StacError as exc:
             raise ApiError(str(exc), code=exc.code, status_code=404 if exc.code == "NOT_FOUND" else 502) from exc
         selection = {"mode": "product", "reason": "catalogue product chosen by the user"}
-    elif source == "auto" and not qp.get("dataset"):
-        found = coverage_service.at_point(lon, lat, crs, lat_conv, planet, include_remote=True)
-        selection["provider"] = found["provider"]
-        # Try catalogue products finest-first until one validates; a product that fails is
-        # reported, and the next one (or the registered DEMs) is used instead.
-        skipped = []
-        local_best = min((r["resolution_m"] for r in found["datasets"] if r["status"] in ("LOCAL", "REMOTE_REGISTERED") and r["resolution_m"]), default=float("inf"))
-        for rec in found["datasets"]:
-            if rec["status"] != "ONLINE_SOURCE" or (rec["resolution_m"] or float("inf")) >= local_best:
-                continue
-            try:
-                forced = dataset_discovery.register_remote_dem(rec)
-                selection["reason"] = "finest valid DTM covering the point (provider catalogue)"
-                break
-            except dataset_discovery.DiscoveryError as exc:
-                skipped.append({"product_id": rec["product_id"], "code": exc.code, "message": str(exc)})
-        if skipped:
-            selection["skipped_products"] = skipped
-
+    skipped: list[dict] = []
     candidates = list(_covering_existing(request, lon, lat, crs, lat_conv, planet))
     if forced is not None and forced.id not in {d.id for d in candidates}:
-        if qp.get("product"):
-            raise ApiError("The chosen product does not cover this point", code="DEM_NOT_AVAILABLE", status_code=404,
-                           details={"query": query, "coverage_status": "NO_DATA_COVERAGE"})
-        forced = None  # outside the raster's bounds after all: fall back to registered DEMs
-    if not candidates:
+        raise ApiError("The chosen product does not cover this point", code="DEM_NOT_AVAILABLE", status_code=404,
+                       details={"query": query, "coverage_status": "NO_DATA_COVERAGE"})
+    # Options, finest first: registered DEMs and (source=auto) catalogue products not yet registered.
+    if forced is not None:
+        options: list[tuple[float, str, object]] = [(0.0, "ds", forced)]
+    else:
+        options = [(d.resolution_meters or float("inf"), "ds", d) for d in candidates]
+        if source == "auto" and not qp.get("dataset"):
+            found = coverage_service.at_point(lon, lat, crs, lat_conv, planet, include_remote=True)
+            selection["provider"] = found["provider"]
+            options += [(r["resolution_m"] or float("inf"), "rec", r) for r in found["datasets"] if r["status"] == "ONLINE_SOURCE"]
+        options.sort(key=lambda o: o[0])
+
+    def attempt(cand):
+        radius = (_float_param(request, "radius_m", 20_000.0, *terrain_patch.RADIUS_LIMITS_M) if qp.get("radius_m")
+                  else _auto_radius(cand, max_dim, terrain_patch.RADIUS_LIMITS_M))
+        try:
+            return terrain_patch.build_patch(cand, lon, lat, radius, max_dim, crs, lat_conv)
+        except dem_reader.RasterReadError as exc:
+            raise ApiError(str(exc), code="DEM_READ_ERROR", status_code=502 if cand.access == "REMOTE_COG" else 500) from exc
+
+    # A DEM that cannot be read, or whose footprint contains the point but which has a data gap
+    # there, is reported and the next one is tried (at most MAX_AUTO_TRIES).
+    ds = body = None
+    gap = False
+    for _, kind, obj in options[:MAX_AUTO_TRIES]:
+        cand = obj
+        if kind == "rec":
+            try:
+                cand = dataset_discovery.register_remote_dem(obj)
+            except dataset_discovery.DiscoveryError as exc:
+                skipped.append({"product_id": obj["product_id"], "code": exc.code, "message": str(exc)})
+                continue
+        try:
+            body, ds = attempt(cand), cand
+            if kind == "rec":
+                selection["reason"] = "finest DTM with valid elevations at the point (provider catalogue)"
+            break
+        except terrain_patch.PatchError as exc:
+            if exc.code != "DEM_NO_VALID_CELLS" or forced is not None:
+                raise ApiError(str(exc), code=exc.code, status_code=422, details={"query": query, **exc.details}) from exc
+            gap = True
+            skipped.append({"product_id": cand.product_id or cand.name, "code": "DATA_GAP", "message": "the DTM has no valid values at this location"})
+    if skipped:
+        selection["skipped_products"] = skipped
+    if body is None:
+        if gap:
+            raise ApiError("Every DEM covering this location has a data gap here; no elevation is shown", code="DEM_NO_VALID_CELLS",
+                           status_code=422, details={"query": query, "skipped_products": skipped, "coverage_status": "DATA_GAP"})
         err = _not_available(query)
-        if selection.get("skipped_products"):
-            err.details["skipped_products"] = selection["skipped_products"]
+        if skipped:
+            err.details["skipped_products"] = skipped
         if selection.get("provider"):
             err.details["provider"] = selection["provider"]
         raise err
-    ds = forced or min(candidates, key=lambda d: d.resolution_meters or float("inf"))  # finest covering DEM
-    radius = (_float_param(request, "radius_m", 20_000.0, *terrain_patch.RADIUS_LIMITS_M) if qp.get("radius_m")
-              else _auto_radius(ds, max_dim, terrain_patch.RADIUS_LIMITS_M))
     _, lat_used, conv = dataset_manager.point_for_dataset(lon, lat, lat_conv, ds)
-    try:
-        body = terrain_patch.build_patch(ds, lon, lat, radius, max_dim, crs, lat_conv)
-    except terrain_patch.PatchError as exc:
-        raise ApiError(str(exc), code=exc.code, status_code=422, details={"query": query, **exc.details}) from exc
-    except dem_reader.RasterReadError as exc:
-        raise ApiError(str(exc), code="DEM_READ_ERROR", status_code=502 if ds.access == "REMOTE_COG" else 500) from exc
     body["query"] = query
     body["selection"] = selection
     body["latitude"] = _latitude_info(conv, lat, lat_used, ds)

@@ -389,3 +389,9 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 1px s
 .cov-section-title { font-size: 10.5px; letter-spacing: .08em; color: var(--text-dim); margin: 10px 0 4px; border-top: 1px solid var(--line); padding-top: 8px; }
 .cov-dem .cov-dataset { margin-top: 6px; }
 .lt3d__steps { display: flex; gap: 4px; }
+.route-assistant, .route-limits { margin: 8px 0; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; }
+.route-assistant summary, .route-limits summary { cursor: pointer; color: var(--text-dim); font-size: 11.5px; letter-spacing: .04em; }
+.route-assistant textarea { width: 100%; margin-top: 6px; background: var(--bg-input); color: var(--text); border: 1px solid var(--line-strong); border-radius: 3px; font: inherit; padding: 6px; resize: vertical; }
+.route-limits label { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: 11.5px; color: var(--text-dim); }
+.route-limits label.check { flex-direction: row; align-items: center; gap: 6px; }
+.plain-list { margin: 4px 0; padding-left: 16px; }

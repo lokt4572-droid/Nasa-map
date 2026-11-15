@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef } from "react";
 import Feature from "ol/Feature";
-import LineString from "ol/geom/LineString";
+import MultiLineString from "ol/geom/MultiLineString";
 import Point from "ol/geom/Point";
 import ImageLayer from "ol/layer/Image";
 import VectorLayer from "ol/layer/Vector";
@@ -15,6 +15,7 @@ import { Circle as CircleStyle, Fill, Stroke, Style, Text } from "ol/style";
 import { describeError } from "../../services/api";
 import { fetchTerrainRender } from "../../services/datasetService";
 import { mapController } from "../../services/marsMapService";
+import { splitAtSeam } from "../../services/planetary/planetaryCoordinateService";
 import { useAppStore } from "../../store/useAppStore";
 
 const MAX_PX = 1024;
@@ -106,6 +107,11 @@ function pointStyle(label: string, color: string) {
   });
 }
 
+/** Line parts for a -180..180 map: the backend's display geometry, or the line split here. */
+export function displayParts(r: { geometry: { coordinates: [number, number][] }; geometry_display?: { coordinates: [number, number][][] } }): [number, number][][] {
+  return r.geometry_display?.coordinates ?? (splitAtSeam(r.geometry.coordinates) as [number, number][][]);
+}
+
 export function RouteOverlay() {
   const draft = useAppStore((s) => s.routeDraft);
   const result = useAppStore((s) => s.routeResult.data);
@@ -127,13 +133,14 @@ export function RouteOverlay() {
     const src = srcRef.current;
     if (!src) return;
     src.clear();
+    // Drawn per seam-split part: a route crossing +/-180 must not be drawn across the whole map.
     if (result?.alternative_route) {
-      const f = new Feature(new LineString(result.alternative_route.geometry.coordinates));
+      const f = new Feature(new MultiLineString(displayParts(result.alternative_route)));
       f.setStyle(routeStyles.alternative);
       src.addFeature(f);
     }
     if (result?.route) {
-      const f = new Feature(new LineString(result.route.geometry.coordinates));
+      const f = new Feature(new MultiLineString(displayParts(result.route)));
       f.setStyle(routeStyles.primary);
       src.addFeature(f);
     }

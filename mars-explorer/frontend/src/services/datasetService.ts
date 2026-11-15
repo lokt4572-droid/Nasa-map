@@ -76,7 +76,15 @@ export const planRoute = (body: {
   include_alternative?: boolean;
   unknown_data_policy?: UnknownDataPolicy;
   mission?: number;
-}) => apiRequest<RoutePlanResponse>("/routes/plan/", { method: "POST", body, timeoutMs: 120_000 });
+  // v0.4 mission configuration (can only make the plan more restrictive)
+  max_slope_deg?: number;
+  required_resolution_m?: number;
+  max_roughness_m?: number;
+  hazard_buffer_m?: number;
+  connectivity?: 4 | 8;
+  prefer_lower_roughness?: boolean;
+  terrain_source?: "local" | "auto";
+}) => apiRequest<RoutePlanResponse>("/routes/plan/", { method: "POST", body, timeoutMs: 180_000 });
 export const deleteRoute = (id: number) => apiRequest<void>(`/routes/${id}/`, { method: "DELETE" });
 
 // --- terrain visualization (v0.2): PNG for a map bbox, metadata from response headers

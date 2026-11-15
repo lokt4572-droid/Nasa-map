@@ -283,6 +283,26 @@ export interface RouteSummary {
   max_cell_slope_deg?: number;
   geometry_simplified?: { type: "LineString"; coordinates: [number, number][] };
   metrics?: RouteMetrics;
+  // v0.4
+  geometry_display?: { type: "MultiLineString"; coordinates: [number, number][][] };
+  validation?: { valid: boolean; problems: string[]; checked_steps: number };
+}
+
+export type CalculationStatus =
+  | "CALCULATED"
+  | "INSUFFICIENT_TERRAIN_DATA"
+  | "START_OUTSIDE_COVERAGE"
+  | "DESTINATION_OUTSIDE_COVERAGE"
+  | "UNKNOWN_TERRAIN"
+  | "INVALID_DATASET"
+  | "NO_VALID_ROUTE"
+  | "PROCESSING_ERROR";
+
+export interface ComparisonTable {
+  criteria: { key: string; title: string; unit: string; lower_is_better: boolean }[];
+  routes: { name: string; label: string; classification?: string; descriptors: string[]; values: Record<string, number | null> }[];
+  shared: { dem?: string; dem_resolution_m?: number | null; grid_cell_m?: number | null; data_quality?: string; planning_scope?: string };
+  note: string;
 }
 
 export interface RoutePlanResponse {
@@ -300,6 +320,14 @@ export interface RoutePlanResponse {
   hazards_considered: number;
   disclaimer: string;
   data_quality: RouteDataQuality;
+  // v0.4
+  calculation_status?: CalculationStatus;
+  route_class?: string;
+  planning_level?: { level: number; name: string };
+  route_label?: string;
+  warnings?: string[];
+  comparison_table?: ComparisonTable;
+  algorithm?: { search: string; connectivity: number; geometry_source: string };
 }
 
 export interface RouteDataQuality {
@@ -320,6 +348,16 @@ export interface RouteDataQuality {
     reason: string;
   };
   planning_scope?: { scope: string; reason: string };
+  // v0.4
+  dataset?: string;
+  resolution_m?: number | null;
+  grid_cell_m?: number;
+  access?: string;
+  quality_status?: string;
+  effective_accuracy?: string;
+  coverage_percentage?: number | null;
+  nodata_percentage?: number | null;
+  unknown_terrain_percentage?: number | null;
 }
 
 export interface RoutePoint extends MarsPointFields {

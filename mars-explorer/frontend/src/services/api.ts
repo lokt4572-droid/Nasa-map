@@ -12,6 +12,8 @@ export class ApiError extends Error {
     public readonly code: string,
     message: string,
     public readonly details?: unknown,
+    /** Parsed JSON body of a non-2xx response (v0.4: e.g. a rejected interpretation, calculation_status). */
+    public readonly body?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -74,8 +76,8 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}, fet
     }
   }
   if (!res.ok) {
-    if (isApiErrorBody(data)) throw new ApiError(res.status, data.error.code, data.error.message, data.error.details);
-    throw new ApiError(res.status, `HTTP_${res.status}`, `Request failed with HTTP ${res.status}`);
+    if (isApiErrorBody(data)) throw new ApiError(res.status, data.error.code, data.error.message, data.error.details, data);
+    throw new ApiError(res.status, `HTTP_${res.status}`, `Request failed with HTTP ${res.status}`, undefined, data);
   }
   return data as T;
 }

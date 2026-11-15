@@ -42,6 +42,10 @@ ADAPTERS = {
                          "used_for": "—", "module": None, "reason": "Not needed: NASA Trek already provides the verified basemaps used here."},
     "LOCAL": {"protocol": "registered raster files (GDAL)", "status": "IMPLEMENTED", "used_for": "any validated DEM imported by the operator",
               "module": "backend services/dataset_manager.py"},
+    "MANUAL_DOWNLOAD": {"protocol": "product page; the operator downloads the file and registers it (import_dem)", "status": "IMPLEMENTED (manual)",
+                        "used_for": "products without a query API (e.g. HiRISE DTM pages, GEBCO, LROC GLD100)", "module": "backend apps/datasets/management/commands/import_dem.py"},
+    "OTHER_ONLINE": {"protocol": "provider-specific web API or tiles (see the record's source URL)", "status": "IMPLEMENTED",
+                     "used_for": "OpenStreetMap tiles, Open-Meteo, NASA POWER", "module": "backend apps/weather, frontend Earth map"},
 }
 
 _UNIT = {"m": 1.0, "cm": 0.01, "km": 1000.0}
@@ -106,7 +110,8 @@ def _catalog_records(planet: str) -> list[dict]:
 
     out = []
     for e in catalog_with_status(planet):
-        provider = next((p for k, p in _PROVIDER_BY_SOURCE if k in e["source"]), e["source"])
+        provider = next((p for k, p in _PROVIDER_BY_SOURCE if k in e["source"]),
+                        "MANUAL_DOWNLOAD" if e.get("access") == "DOWNLOAD" else "OTHER_ONLINE")
         out.append(_rec(
             planet_id=planet, dataset_id=e["key"], provider=provider, product_id=e["product_id"], data_type=e["data_type"],
             format="per product", resolution_text=e["resolution"], coverage=e["spatial_coverage"], crs=e["crs"],

@@ -38,7 +38,7 @@ class RegistryTests(TestCase):
     def test_adapters_state_their_protocol_and_status(self):
         b = APIClient().get("/api/v1/datasets/registry/", {"planet": "MARS"}).json()
         a = b["adapters"]
-        self.assertEqual(set(a), {"NASA_TREK", "NASA_GIBS", "NASA_PDS", "USGS_ASTROGEOLOGY", "STAC", "COPERNICUS", "CESIUM_ION", "OPENPLANETARYMAP", "LOCAL"})
+        self.assertEqual(set(a), {"NASA_TREK", "NASA_GIBS", "NASA_PDS", "USGS_ASTROGEOLOGY", "STAC", "COPERNICUS", "CESIUM_ION", "OPENPLANETARYMAP", "LOCAL", "MANUAL_DOWNLOAD", "OTHER_ONLINE"})
         self.assertEqual(a["OPENPLANETARYMAP"]["status"], "NOT_IMPLEMENTED")
         self.assertIn("never analysis", a["CESIUM_ION"]["used_for"])
 

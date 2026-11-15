@@ -22,6 +22,7 @@ export default function OfflinePanel() {
   const datasets = useAppStore((s) => s.datasets.data);
   const activeMissionId = useAppStore((s) => s.activeMissionId);
   const planet = useAppStore((s) => s.planet);
+  const routeData = useAppStore((s) => s.routeResult.data);
   const online = useAppStore((s) => s.backend.status === "online");
   const { refreshMissions, refreshHazards } = useRefreshers();
   const [records, setRecords] = useState<SyncRecord[]>([]);
@@ -41,7 +42,9 @@ export default function OfflinePanel() {
   const exportZip = async () => {
     if (!active) return;
     try {
-      const { zip, manifest } = await buildMissionZip({ mission: active, hazards: hazards ?? [], datasets: datasets ?? [], planet });
+      const { zip, manifest } = await buildMissionZip({ mission: active, hazards: hazards ?? [], datasets: datasets ?? [], planet,
+        // The route currently planned (if any) is included as computed: geometry, metrics, validation.
+        routes: routeData && routeData.route ? [routeData] : [] });
       download(`mission-${active.id}-package.zip`, zip);
       setMsg({ ok: `Exported ZIP (${manifest.files.length} files, SHA-256 manifest). No map tiles or DEM rasters are included.` });
     } catch (err) {

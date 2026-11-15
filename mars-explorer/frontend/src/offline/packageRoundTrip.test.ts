@@ -115,3 +115,33 @@ describe("mission package round trip (disposable test mission)", () => {
     expect(manifest.crs).toMatch(/104903/);
   });
 });
+
+describe("mission package with a waypoint, several hazards and a route (v0.5)", () => {
+  it("round-trips waypoints, every hazard and the route; a duplicate import creates nothing", async () => {
+    const { db, request } = fakeBackend();
+    const wp = { id: 1, mission: 300, name: "WP-1", lon_east_deg: 77.45, lat_deg: 18.44, crs: "urn:ogc:def:crs:EPSG::104905", order: 0, notes: "", created_at: "" };
+    const mission = { id: 300, name: "TEST-v05-zip", description: "disposable", status: "PLANNED", demo_mode: false, waypoints: [wp],
+      hazard_count: 3, client_id: "44444444-4444-4444-8444-444444444444" } as unknown as Mission;
+    db.missions.set(300, { ...mission, version: 1 } as never);
+    const hz = [hazard(401, 300, "Rim", "55555555-5555-4555-8555-555555555555"), hazard(402, 300, "Scarp", "66666666-6666-4666-8666-666666666666"),
+      hazard(403, 300, "Dunes", "77777777-7777-4777-8777-777777777777"), hazard(404, 999, "Other mission", "88888888-8888-4888-8888-888888888888")];
+    hz.forEach((h) => db.hazards.set(h.id, { ...h, version: 1 } as never));
+    const route = { geometry: { type: "LineString", coordinates: [[77.4475, 18.4385], [77.4525, 18.4425]] }, validation_status: "VALIDATED" };
+    const { zip } = await buildMissionZip({ mission, hazards: hz, routes: [route], planet: "MARS" });
+    const files = unzipSync(zip);
+    const names = Object.keys(files);
+    const read = (suffix: string) => JSON.parse(strFromU8(files[names.find((n) => n.endsWith(suffix))!]!));
+    expect(read("mission/mission.json").waypoints).toEqual([wp]);
+    expect(read("hazards/hazards.json").map((h: Hazard) => h.title)).toEqual(["Rim", "Scarp", "Dunes"]); // other mission's hazard excluded
+    expect(read("routes/routes.json")).toEqual([route]);
+    const parsed = await readMissionZip(zip, "MARS");
+    expect(parsed.errors).toEqual([]);
+    // Duplicate import while the originals still exist: nothing new is created.
+    const before = { m: db.missions.size, h: db.hazards.size };
+    const r1 = await restoreMissionPackage(parsed, request);
+    const r2 = await restoreMissionPackage(parsed, request);
+    expect(r2.hazards).toHaveLength(3);
+    expect({ m: db.missions.size, h: db.hazards.size }).toEqual(before);
+    expect(r1.mission.outcome).not.toBe("CREATED");
+  });
+});
